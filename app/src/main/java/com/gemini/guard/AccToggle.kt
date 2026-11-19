@@ -9,8 +9,8 @@ object AccToggle {
     private fun isOurs(c: Context, entry: String): Boolean =
         ComponentName.unflattenFromString(entry.trim()) == ComponentName(c, MiAiWatcher::class.java)
 
-    fun isOn(c: Context): Boolean =
-        (Settings.Secure.getString(c.contentResolver, Restorer.ACC_KEY) ?: "").split(":").any { isOurs(c, it) }
+    /** Chi coi la BAT khi ca danh sach dich vu lan cong tac Tro nang cua he thong deu bat. */
+    fun isOn(c: Context): Boolean = Restorer.accessibilityOn(c)
 
     /** Bat/tat rieng dich vu Gemini Guard, giu nguyen moi dich vu Tro nang khac dang bat. */
     fun setEnabled(c: Context, enable: Boolean): Boolean = try {

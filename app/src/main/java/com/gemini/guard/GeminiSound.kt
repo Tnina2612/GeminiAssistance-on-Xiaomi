@@ -1,5 +1,6 @@
 package com.gemini.guard
 
+import android.app.NotificationManager
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaPlayer
@@ -24,7 +25,7 @@ object GeminiSound {
             val mp = MediaPlayer()
             mp.setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build()
             )
@@ -61,10 +62,17 @@ object GeminiSound {
         try { r.mp.release() } catch (_: Throwable) {}
     }
 
+    /** DND / im lang: chi INTERRUPTION_FILTER_ALL moi duoc phat hieu ung luc binh thuong. */
+    private fun dndMuted(app: Context): Boolean = try {
+        val nm = app.getSystemService(NotificationManager::class.java)
+        nm != null && nm.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
+    } catch (_: Throwable) { false }
+
     fun play(ctx: Context, minGapMs: Long = 1500, force: Boolean = false) {
         val app = ctx.applicationContext
         val pr = Restorer.prefs(app)
         if (!force && !pr.getBoolean("snd_on", false)) return
+        if (!force && dndMuted(app)) return
         val now = SystemClock.elapsedRealtime()
         if (!force && now - lastPlay < minGapMs) return
         lastPlay = now

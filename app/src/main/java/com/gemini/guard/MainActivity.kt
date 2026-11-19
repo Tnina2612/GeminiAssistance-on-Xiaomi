@@ -166,7 +166,7 @@ class MainActivity : Activity() {
         val s = Switch(this).apply {
             this.text = text; textSize = 15f; setTextColor(INK)
             isChecked = prefs().getBoolean(key, def)
-            setOnCheckedChangeListener { _, on -> prefs().edit().putBoolean(key, on).apply(); pushService() }
+            setOnCheckedChangeListener { _, on -> prefs().edit().putBoolean(key, on).apply(); pushService(); refresh() }
         }
         p.addView(s, lp(14))
         if (hint != null) p.addView(label(hint, 12f, MUTED).apply { setPadding(0, dp(2), 0, 0) }, lp(0))
@@ -271,7 +271,7 @@ class MainActivity : Activity() {
                 override fun onProgressChanged(s: SeekBar, pr: Int, u: Boolean) { v.text = "$pr$unit" }
                 override fun onStartTrackingTouch(s: SeekBar) {}
                 override fun onStopTrackingTouch(s: SeekBar) {
-                    prefs().edit().putInt(key, s.progress).apply(); pushService()
+                    prefs().edit().putInt(key, s.progress).apply(); pushService(); refresh()
                 }
             })
         }
@@ -344,13 +344,18 @@ class MainActivity : Activity() {
         })
     }
 
-    private fun learnMode(mode: String) {
-        prefs().edit().putString("learn_mode", mode)
-            .putLong("learn_until", android.os.SystemClock.elapsedRealtime() + 20000L).apply()
-        Toast.makeText(this,
-            if (mode == "inc") L.tr("Hãy gọi Mi AI bằng giọng nói ngay (trong 20 giây), chỉ cần nói câu gọi.")
-            else L.tr("Hãy mở app Mi AI và bật dịch màn hình ngay (trong 20 giây)."),
-            Toast.LENGTH_LONG).show()
+    /** Nhu bindPref nhung de trong thi xoa khoa, de noi doc dung gia tri mac dinh. */
+    private fun bindField(e: EditText, key: String) {
+        e.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val v = s?.toString()?.trim() ?: ""
+                val ed = prefs().edit()
+                if (v.isEmpty()) ed.remove(key) else ed.putString(key, v)
+                ed.apply()
+            }
+        })
     }
 
     private fun openAutostart() {
@@ -367,7 +372,6 @@ class MainActivity : Activity() {
     @Suppress("DEPRECATION")
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
-        prefs().edit().remove("evlog").remove("ev_log").apply()   // don nhat ky su kien cu (tinh nang da go)
         if (android.os.Build.VERSION.SDK_INT >= 33)
             requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 1)
         window.statusBarColor = BG
@@ -431,7 +435,7 @@ class MainActivity : Activity() {
             Toast.makeText(this, if (ch.isEmpty()) L.tr("Mọi thứ đã đúng") else L.fmt("Đã sửa %d mục", ch.size), Toast.LENGTH_SHORT).show()
         }
 
-        btn(c1, "Restart Google", top = 8) {
+        btn(c1, L.tr("Khởi động lại Google (tắt → bật)"), top = 8) {
             Toast.makeText(this, L.tr("Đang tắt → bật lại, giữ app mở vài giây…"), Toast.LENGTH_SHORT).show()
             Thread {
                 val res = Restorer.cycle(this)
@@ -452,6 +456,7 @@ class MainActivity : Activity() {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         }
         ctsPkg = field(c2, L.tr("Tên gói MiCTS"), "com.parallelc.micts", prefs().getString("cts_pkg", "com.parallelc.micts") ?: "")
+        bindField(ctsPkg, "cts_pkg")
         choice(c2, L.tr("Chạm đúp"), "bar_dt")
         choice(c2, L.tr("Giữ"), "bar_lp")
         trPkg = field(c2, L.tr("Dịch màn hình: tên gói app dịch"), "com.xiaomi.aiasst.vision", prefs().getString("tr_pkg", BarOverlay.TR_PKG) ?: "")
@@ -460,7 +465,7 @@ class MainActivity : Activity() {
         bindPref(trTxt, "tr_text")
         seek(c2, L.tr("Chiều rộng"), "%", "bar_w", 100, 40)
         seek(c2, L.tr("Chiều cao"), " dp", "bar_h", 60, 20)
-        seek(c2, L.tr("Cách đáy"), " dp", "bar_y", 60, 0)
+        seek(c2, L.tr("Cách đáy (kéo thanh để đổi)"), " dp", "bar_y", BarOverlay.MAX_Y_DP, 0)
         seek(c2, L.tr("Độ đậm (0 = vô hình)"), "%", "bar_a", 100, 30)
 
         // 3. Mi AI
@@ -491,12 +496,13 @@ class MainActivity : Activity() {
         seek(c3, L.tr("Độ trễ trước khi gọi Gemini"), " ms", "mi_delay", 1500, 350)
         miPkgs = field(c3, L.tr("Tên gói Mi AI (cách nhau bằng dấu phẩy)"), "com.miui.voiceassist",
             prefs().getString("mi_pkgs", MiAiWatcher.DEFAULT_PKGS) ?: "")
+        bindField(miPkgs, "mi_pkgs")
         miInc = field(c3, L.tr("Chỉ gọi Gemini khi cửa sổ Mi AI là (để trống = mọi cửa sổ)"), L.tr("Để trống = mọi cửa sổ"), prefs().getString("mi_inc", MiAiWatcher.DEFAULT_INC) ?: "")
         bindPref(miInc, "mi_inc")
         miExc = field(c3, L.tr("Bỏ qua khi cửa sổ Mi AI là (mở app, dịch màn hình…)"), L.tr("Để trống = không bỏ qua cửa sổ nào"), prefs().getString("mi_exc", MiAiWatcher.DEFAULT_EXC) ?: "")
         bindPref(miExc, "mi_exc")
         btn(c3, L.tr("Đặt lại bộ lọc về mặc định"), top = 12) {
-            prefs().edit().remove("mi_inc").remove("mi_exc").remove("learn_mode").apply()
+            prefs().edit().remove("mi_inc").remove("mi_exc").apply()
             refresh()
         }
         btn(c3, L.tr("Mở cài đặt Trợ năng"), primary = true) { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
@@ -511,6 +517,7 @@ class MainActivity : Activity() {
         seek(c4, L.tr("Bỏ qua đầu âm thanh để bớt trễ"), " ms", "snd_skip", 600, 0)
         seek(c4, L.tr("Chống lặp âm thanh"), L.tr(" giây"), "snd_gap_s", 10, 3)
         sndCls = field(c4, L.tr("Lọc tên cửa sổ Google (tùy chọn)"), L.tr("Để trống = mọi cửa sổ"), prefs().getString("snd_cls", "") ?: "")
+        bindField(sndCls, "snd_cls")
         btn(c4, L.tr("Thử âm thanh"), primary = true) { GeminiSound.play(this, force = true) }
         sw(c4, L.tr("Rung nhẹ khi Gemini hiện lên"), L.tr("Máy rung ngắn tạo cảm giác cửa sổ bật ra. Dùng chung bộ lọc cửa sổ và chống lặp với âm thanh ở trên."), "vib_on", false)
         seek(c4, L.tr("Độ mạnh rung"), "%", "vib_str", 100, 60)
@@ -546,19 +553,11 @@ class MainActivity : Activity() {
         pushService()
     }
 
-    override fun onResume() { super.onResume(); refresh(); pushService() }
-
-    override fun onPause() {
-        super.onPause()
-        val p = prefs().edit()
-        // Gia tri rong = xoa khoa de quay ve mac dinh (truoc day bi chan boi isNotEmpty nen khong xoa duoc).
-        for ((key, e) in listOf("cts_pkg" to ctsPkg, "mi_pkgs" to miPkgs)) {
-            val v = e.text.toString().trim()
-            if (v.isEmpty()) p.remove(key) else p.putString(key, v)
-        }
-        p.putString("snd_cls", sndCls.text.toString().trim())
-        p.apply()
+    override fun onResume() {
+        super.onResume()
+        // Goi pushService truoc de HyperOS kip ap dung cai dat, roi moi doc trang thai hien thi.
         pushService()
+        refresh()
     }
 
     private fun refresh() {

@@ -40,13 +40,6 @@ class MiAiWatcher : AccessibilityService() {
         val cls = e.className?.toString() ?: ""
         wlog("Mi AI: $cls")
 
-        // Che do hoc: ghi lai ten cua so, khong goi Gemini
-        val mode = pr.getString("learn_mode", "") ?: ""
-        if (mode.isNotEmpty()) {
-            if (SystemClock.elapsedRealtime() <= pr.getLong("learn_until", 0L)) { learn(pr, mode, cls); return }
-            pr.edit().remove("learn_mode").apply()
-        }
-
         // Loc theo ten cua so: chi lop phu giong noi moi goi Gemini, mo app / dich man hinh thi bo qua
         val exc = pr.getString("mi_exc", DEFAULT_EXC) ?: ""
         val inc = pr.getString("mi_inc", DEFAULT_INC) ?: ""
@@ -151,15 +144,6 @@ class MiAiWatcher : AccessibilityService() {
     private fun matches(list: String, cls: String): Boolean =
         list.split(",", "\n", ";").map { it.trim() }.filter { it.isNotEmpty() }
             .any { cls.contains(it, ignoreCase = true) }
-
-    private fun learn(pr: SharedPreferences, mode: String, cls: String) {
-        if (cls.isEmpty()) return
-        val key = if (mode == "inc") "mi_inc" else "mi_exc"
-        val cur = (pr.getString(key, "") ?: "").split(",").map { it.trim() }.filter { it.isNotEmpty() }
-        if (cls !in cur) pr.edit().putString(key, (cur + cls).joinToString(",")).apply()
-        if (mode == "inc") pr.edit().remove("learn_mode").apply()   // giong noi: chi can cua so dau tien
-        Toast.makeText(this, L.tr("Đã học (") + L.tr(if (mode == "inc") L.tr("giọng nói") else L.tr("loại trừ")) + "): " + cls, Toast.LENGTH_SHORT).show()
-    }
 
     private var lastSeenTop = ""
     private var lastAssistantWin = ""

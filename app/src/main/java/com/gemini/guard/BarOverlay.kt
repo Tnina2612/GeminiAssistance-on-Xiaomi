@@ -5,7 +5,9 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.os.SystemClock
@@ -34,32 +36,8 @@ class BarOverlay(private val ctx: Context) {
         val dm = ctx.resources.displayMetrics
         val w = dm.widthPixels * p.getInt("bar_w", 40) / 100
         val h = (dm.density * p.getInt("bar_h", 20)).toInt().coerceAtLeast(8)
-        val y = (dm.density * p.getInt("bar_y", 0)).toInt()
+        val maxY = (dm.density * MAX_Y_DP).toInt()
         val alpha = p.getInt("bar_a", 30) * 255 / 100
-
-        val v = View(ctx)
-        v.background = GradientDrawable().apply {
-            cornerRadius = h / 2f
-            setColor(Color.argb(alpha, 255, 255, 255))
-        }
-        val gd = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDown(e: MotionEvent): Boolean = true
-            override fun onLongPress(e: MotionEvent) {
-                val a = currentAction(Restorer.prefs(ctx), "bar_lp")
-                if (a == "none") return
-                v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                performAction(a)
-            }
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                val a = currentAction(Restorer.prefs(ctx), "bar_dt")
-                if (a != "none") {
-                    v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
-                    performAction(a)
-                }
-                return true
-            }
-        })
-        v.setOnTouchListener { _, e -> gd.onTouchEvent(e) }
 
         val lp = WindowManager.LayoutParams(
             w, h, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -69,9 +47,83 @@ class BarOverlay(private val ctx: Context) {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            this.y = y
+            this.y = (dm.density * p.getInt("bar_y", 0)).toInt().coerceIn(0, maxY)
         }
-        try { wm.addView(v, lp); view = v } catch (e: Exception) {
+
+        val v = View(ctx)
+        v.background = GradientDrawable().apply {
+            cornerRadius = h / 2f
+            setColor(Color.argb(alpha, 255, 255, 255))
+        }
+        var downRawY = 0f
+        var startY = 0
+        var dragging = false
+        val slop = android.view.ViewConfiguration.get(ctx).scaledTouchSlop
+
+        val gd = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean = true
+            override fun onLongPress(e: MotionEvent) {
+                if (dragging) return
+                val a = currentAction(Restorer.prefs(ctx), "bar_lp")
+                if (a == "none") return
+                v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                performAction(a)
+            }
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                if (dragging) return false
+                val a = currentAction(Restorer.prefs(ctx), "bar_dt")
+                if (a != "none") {
+                    v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                    performAction(a)
+                }
+                return true
+            }
+        })
+        v.setOnTouchListener { _, e ->
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawY = e.rawY
+                    startY = lp.y
+                    dragging = false
+                    gd.onTouchEvent(e)
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (!dragging && kotlin.math.abs(e.rawY - downRawY) > slop) {
+                        dragging = true
+                        // Huy nhan long-press / double-tap dang cho de khong kich hoat nham khi keo.
+                        MotionEvent.obtain(e).also { c ->
+                            c.action = MotionEvent.ACTION_CANCEL
+                            gd.onTouchEvent(c)
+                            c.recycle()
+                        }
+                        v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    }
+                    if (dragging) {
+                        lp.y = (startY - (e.rawY - downRawY)).toInt().coerceIn(0, maxY)
+                        try { wm.updateViewLayout(v, lp) } catch (_: Exception) {}
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (dragging) {
+                        // Luu vi tri theo dp de giu nguyen khi doi mat do man hinh / xoay may.
+                        Restorer.prefs(ctx).edit()
+                            .putInt("bar_y", (lp.y / dm.density).toInt().coerceIn(0, MAX_Y_DP)).apply()
+                        dragging = false
+                    } else gd.onTouchEvent(e)
+                }
+            }
+            true
+        }
+
+        try {
+            wm.addView(v, lp)
+            view = v
+            // Khi thanh nam sat day, vung vuot he thong (home/back gesture) co the chan thao tac keo.
+            // Xin mien tru cu chi cham tren thanh de nguoi dung van keo duoc tu vi tri mac dinh.
+            if (Build.VERSION.SDK_INT >= 29) v.post {
+                try { v.systemGestureExclusionRects = listOf(Rect(0, 0, v.width, v.height)) } catch (_: Exception) {}
+            }
+        } catch (e: Exception) {
             Toast.makeText(ctx, L.tr("Không hiện được thanh: ") + e.message, Toast.LENGTH_LONG).show()
         }
     }
@@ -174,5 +226,8 @@ class BarOverlay(private val ctx: Context) {
 
         const val TR_PKG = "com.xiaomi.aiasst.vision"
         const val TR_TEXT = "Dịch màn hình,Screen translation"
+
+        /** Vi tri cao nhat cua thanh (dp) tinh tu day man hinh. */
+        const val MAX_Y_DP = 200
     }
 }
