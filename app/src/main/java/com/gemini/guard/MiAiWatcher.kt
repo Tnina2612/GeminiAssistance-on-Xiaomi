@@ -90,7 +90,8 @@ class MiAiWatcher : AccessibilityService() {
     private fun callGemini(pkg: String) {
         // Thu dung tien trinh Mi AI (co the khong tac dung neu la tien trinh he thong)
         try { (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).killBackgroundProcesses(pkg) } catch (_: Throwable) {}
-        Restorer.ensure(this)
+        // Chi sua cai dat khi nguoi dung con bat "Canh nen"; tat thi chi goi tro ly, khong ghi he thong.
+        if (Restorer.prefs(this).getBoolean("enabled", true)) Restorer.ensure(this)
         val err = Restorer.callTarget(this)
         wlog(if (err == null) "→ gọi xong: OK" else "→ gọi LỖI: $err")
         if (err == null) GeminiSound.play(this)
