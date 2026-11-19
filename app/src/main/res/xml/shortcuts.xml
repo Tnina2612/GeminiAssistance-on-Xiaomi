@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="toggle_acc"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut"
+        android:shortcutShortLabel="@string/shortcut_toggle_short"
+        android:shortcutLongLabel="@string/shortcut_toggle_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.gemini.guard"
+            android:targetClass="com.gemini.guard.AccToggleActivity" />
+    </shortcut>
+</shortcuts>

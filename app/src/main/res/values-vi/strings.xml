@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mi_ai_watcher_label">Gemini Guard – theo dõi Mi AI</string>
+    <string name="mi_ai_watcher_desc">Theo dõi các cửa sổ ứng dụng hiện ra (Mi AI và Google) để gọi Gemini, đóng Mi AI bằng Back hoặc chạm, và có thể bấm thẻ Dịch màn hình trong app Dịch của Xiaomi. Không thu thập hay gửi dữ liệu nào.</string>
+    <string name="tile_label">Trợ năng Gemini Guard</string>
+    <string name="shortcut_toggle_short">Bật/tắt Trợ năng</string>
+    <string name="shortcut_toggle_long">Bật/tắt Trợ năng Gemini Guard</string>
+</resources>
