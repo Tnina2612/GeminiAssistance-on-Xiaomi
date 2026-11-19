@@ -16,8 +16,15 @@ object GeminiCall {
         val iface = Class.forName("com.android.internal.app.IVoiceInteractionManagerService")
         val m = iface.methods.first { it.name == "showSessionFromSession" }
         val args = Bundle().apply { putLong("invocation_time_ms", SystemClock.elapsedRealtime()) }
-        val params: Array<Any?> =
-            if (m.parameterCount == 4) arrayOf(null, args, 7, null) else arrayOf(null, args, 7)
+        // Dung theo kieu tham so thay vi dem so luong: chu ky ham nay doi qua cac ban Android
+        // (them session token / String...). Tham so la khong ro thi truyen null.
+        val params: Array<Any?> = m.parameterTypes.map { t ->
+            when {
+                t == Bundle::class.java -> args
+                t == Int::class.javaPrimitiveType -> 7
+                else -> null
+            }
+        }.toTypedArray()
         return m.invoke(vims, *params)
     }
 

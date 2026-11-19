@@ -57,8 +57,10 @@ class MainActivity : Activity() {
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     private fun pushService() {
-        Restorer.ensure(this)
-        if (prefs().getBoolean("enabled", true) || prefs().getBoolean("bar", false))
+        val p = prefs()
+        val watching = p.getBoolean("enabled", true)
+        if (watching) Restorer.ensure(this)
+        if (watching || p.getBoolean("bar", false))
             startForegroundService(Intent(this, GuardService::class.java))
         else stopService(Intent(this, GuardService::class.java))
     }
@@ -421,6 +423,9 @@ class MainActivity : Activity() {
         val c1 = card(root, L.tr("Giữ Gemini làm trợ lý"),
             L.tr("Canh các cài đặt hệ thống, nếu HyperOS xóa hoặc đổi sang Mi AI thì tự ghi lại Google."))
         sw(c1, L.tr("Canh nền và tự khôi phục Google"), null, "enabled", true)
+        sw(c1, L.tr("Ghi đè hành vi giữ nút nguồn"),
+            L.tr("Tắt nếu bạn muốn giữ nguyên hành vi gốc của nút nguồn (menu nguồn, đèn pin…). Tắt chỉ ngừng ghi đè, không tự trả lại giá trị cũ."),
+            "power_key", true)
         btn(c1, L.tr("Khôi phục ngay"), primary = true) {
             val ch = Restorer.ensure(this)
             Toast.makeText(this, if (ch.isEmpty()) L.tr("Mọi thứ đã đúng") else L.fmt("Đã sửa %d mục", ch.size), Toast.LENGTH_SHORT).show()
@@ -545,11 +550,14 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        val t = ctsPkg.text.toString().trim()
-        if (t.isNotEmpty()) prefs().edit().putString("cts_pkg", t).apply()
-        prefs().edit().putString("snd_cls", sndCls.text.toString().trim()).apply()
-        val m = miPkgs.text.toString().trim()
-        if (m.isNotEmpty()) prefs().edit().putString("mi_pkgs", m).apply()
+        val p = prefs().edit()
+        // Gia tri rong = xoa khoa de quay ve mac dinh (truoc day bi chan boi isNotEmpty nen khong xoa duoc).
+        for ((key, e) in listOf("cts_pkg" to ctsPkg, "mi_pkgs" to miPkgs)) {
+            val v = e.text.toString().trim()
+            if (v.isEmpty()) p.remove(key) else p.putString(key, v)
+        }
+        p.putString("snd_cls", sndCls.text.toString().trim())
+        p.apply()
         pushService()
     }
 
@@ -576,7 +584,7 @@ class MainActivity : Activity() {
         stateBox.addView(stateRow(cts, "MiCTS", L.tr("Đã cài"), L.tr("Chưa cài")))
 
         status.text = Restorer.status(this) +
-            L.tr("\n\nCửa sổ Google vừa thấy (mới nhất trước):\n") +
+            L.tr("\n\nCửa sổ trợ lý vừa thấy (mới nhất trước):\n") +
             (prefs().getString("gseen", "")?.ifBlank { L.tr("(chưa có)") } ?: "") +
             L.tr("\n\nỨng dụng vừa thấy (để tìm tên gói Mi AI):\n") +
             (prefs().getString("seen", "")?.ifBlank { L.tr("(chưa có – bật Trợ năng rồi gọi Mi AI)") } ?: "")

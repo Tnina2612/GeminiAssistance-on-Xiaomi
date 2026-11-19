@@ -25,7 +25,9 @@ class MiAiWatcher : AccessibilityService() {
         if (e.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = e.packageName?.toString() ?: return
         if (pkg == packageName) return
-        if (pkg == Restorer.targetPkg(this)) { onGoogleWindow(e); return }
+        // Luon nghe ca Google: chon ChatGPT lam target van can hieu ung khi giu nut nguon mo Gemini.
+        // Truoc day Google bi loc khoi packageNames nen am thanh / rung bi mat trong truong hop nay.
+        if (pkg == Restorer.GOOGLE_PKG || pkg == Restorer.targetPkg(this)) { onAssistantWindow(e, pkg); return }
         val pr = Restorer.prefs(this)
         if (!pr.getBoolean("mi_on", false)) return
 
@@ -110,15 +112,16 @@ class MiAiWatcher : AccessibilityService() {
         } catch (_: Throwable) { null }
     }
 
-    /** Cua so cua app Google (Gemini overlay) vua hien -> phat am thanh (ca khi giu nut nguon / goi giong noi). */
-    private fun onGoogleWindow(e: AccessibilityEvent) {
+    /** Cua so tro ly muc tieu hoac Google vua hien -> phat am thanh (ca khi giu nut nguon / goi giong noi). */
+    private fun onAssistantWindow(e: AccessibilityEvent, pkg: String) {
         val pr = Restorer.prefs(this)
         val now = SystemClock.elapsedRealtime()
         val cls = e.className?.toString() ?: ""
-        if (cls != lastGoogleCls) {
-            lastGoogleCls = cls
-            val old = (pr.getString("gseen", "") ?: "").split("\n").filter { it.isNotBlank() && it != cls }
-            pr.edit().putString("gseen", (listOf(cls) + old).take(8).joinToString("\n")).apply()
+        val line = "$pkg  $cls"
+        if (line != lastAssistantWin) {
+            lastAssistantWin = line
+            val old = (pr.getString("gseen", "") ?: "").split("\n").filter { it.isNotBlank() && it != line }
+            pr.edit().putString("gseen", (listOf(line) + old).take(8).joinToString("\n")).apply()
         }
 
         val filter = pr.getString("snd_cls", "")?.trim().orEmpty()
@@ -158,7 +161,7 @@ class MiAiWatcher : AccessibilityService() {
     }
 
     private var lastSeenTop = ""
-    private var lastGoogleCls = ""
+    private var lastAssistantWin = ""
 
     private fun remember(pkg: String, line: String) {
         if (pkg in IGNORE) return
@@ -202,11 +205,11 @@ class MiAiWatcher : AccessibilityService() {
     // ---------- Tiet kiem pin: chi nhan dung su kien can thiet ----------
     private var infoKey = ""
     private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == "mi_pkgs" || key == "target_pkg") applyInfo()
+        if (key == "mi_pkgs" || key == "target_pkg" || key == "tr_pkg") applyInfo()
     }
 
     /**
-     * Binh thuong: chi nhan su kien doi cua so cua goi Mi AI + Google (he thong khong day su kien cua app khac).
+     * Binh thuong: chi nhan su kien doi cua so cua goi Mi AI, tro ly muc tieu, Google va app dich.
      * Co "include not important views" chi bat trong luc bam the dich.
      */
     private fun applyInfo(notImportant: Boolean = false) {
@@ -214,7 +217,11 @@ class MiAiWatcher : AccessibilityService() {
             val pr = Restorer.prefs(this)
             val pk = (pr.getString("mi_pkgs", DEFAULT_PKGS) ?: DEFAULT_PKGS)
                 .split(",", ";", " ", "\n").map { it.trim() }.filter { it.isNotEmpty() }
-            val pkgs = (pk + Restorer.targetPkg(this)).distinct().toTypedArray()
+            // Luon gom Google + app dich + goi dich man hinh: Google de nhan hieu ung am thanh
+            // ke ca khi target la ChatGPT; goi dich de clickCardByText thay cua so app dich.
+            val tr = (pr.getString("tr_pkg", BarOverlay.TR_PKG) ?: "").trim()
+            val pkgs = (pk + Restorer.targetPkg(this) + Restorer.GOOGLE_PKG + tr)
+                .filter { it.isNotBlank() }.distinct().toTypedArray()
             val types = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
             var flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
             if (notImportant) flags = flags or AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS

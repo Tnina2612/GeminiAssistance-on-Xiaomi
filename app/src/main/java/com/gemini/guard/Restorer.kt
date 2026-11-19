@@ -52,20 +52,62 @@ object Restorer {
      * Khac Google (vd ChatGPT): chi mo thang app do len, khong phai lop phu tro ly he thong that.
      * Tra ve null = thanh cong, khac null = mo ta loi. */
     fun callTarget(c: Context): String? {
-        if (targetPkg(c) == GOOGLE_PKG) {
-            val err = GeminiCall.show()
-            if (err == null) return null
-            val gem = c.packageManager.getLaunchIntentForPackage("com.google.android.apps.bard")
-            return try {
-                if (gem != null) { c.startActivity(gem.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); null } else err
-            } catch (_: Exception) { err }
-        }
+        if (targetPkg(c) == GOOGLE_PKG) return callGoogle(c)
         if (targetPkg(c) == CHATGPT_PKG) return callChatGpt(c)
         val pkg = targetPkg(c)
         val i = c.packageManager.getLaunchIntentForPackage(pkg)
             ?: return L.fmt("Chưa cài %s (%s)", targetLabel(c), pkg)
         return try { c.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); null }
         catch (e: Exception) { e.message ?: "error" }
+    }
+
+    /**
+     * Goi Gemini theo 3 buoc: phien tro ly that (hidden API) -> ACTION_ASSIST de he thong phan giai
+     * -> mo thang app Gemini. Ghi lai loi tung buoc de chan doan khi Android moi doi API an.
+     */
+    private fun callGoogle(c: Context): String? {
+        val hiddenErr = GeminiCall.show()
+        if (hiddenErr == null) {
+            noteAssist(c, "phiên trợ lý hệ thống: OK")
+            return null
+        }
+
+        // Chi gui ACTION_ASSIST khi he thong thuc su co activity xu ly, tranh "gui xong nhung khong hien gi".
+        val assist = Intent(Intent.ACTION_ASSIST).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val assistErr: String? = if (assist.resolveActivity(c.packageManager) == null) {
+            "không có activity xử lý ACTION_ASSIST"
+        } else try {
+            c.startActivity(assist)
+            null
+        } catch (e: Exception) { e.message ?: e.javaClass.simpleName }
+        if (assistErr == null) {
+            noteAssist(c, "phiên trợ lý lỗi ($hiddenErr) → ACTION_ASSIST: đã gửi")
+            return null
+        }
+
+        val gem = c.packageManager.getLaunchIntentForPackage("com.google.android.apps.bard")
+        return try {
+            if (gem != null) {
+                c.startActivity(gem.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                noteAssist(c, "phiên trợ lý lỗi ($hiddenErr) → mở app Gemini")
+                null
+            } else {
+                val msg = L.fmt("Không gọi được Gemini: %s (ACTION_ASSIST: %s)", hiddenErr, assistErr)
+                noteAssist(c, msg)
+                msg
+            }
+        } catch (e: Exception) {
+            val msg = L.fmt("Không gọi được Gemini: %s (ACTION_ASSIST: %s, app Gemini: %s)",
+                hiddenErr, assistErr, e.message ?: e.javaClass.simpleName)
+            noteAssist(c, msg)
+            msg
+        }
+    }
+
+    /** Ghi ket qua lan goi Gemini gan nhat de chan doan tren trang thai (giong chatgpt_last). */
+    private fun noteAssist(c: Context, msg: String) {
+        val t = SimpleDateFormat("dd/MM HH:mm:ss", Locale.US).format(Date())
+        prefs(c).edit().putString("assist_last", "$t  $msg").apply()
     }
 
     /**
@@ -148,6 +190,9 @@ object Restorer {
 
     fun prefs(c: Context) = c.getSharedPreferences("guard", Context.MODE_PRIVATE)
 
+    /** Nguoi dung co muon app ghi de hanh vi giu nut nguon khong (mac dinh: co). */
+    fun enforcePowerKey(c: Context) = prefs(c).getBoolean("power_key", true)
+
     fun hasPermission(c: Context) =
         c.checkSelfPermission("android.permission.WRITE_SECURE_SETTINGS") == PackageManager.PERMISSION_GRANTED
 
@@ -166,10 +211,12 @@ object Restorer {
                     changes += "$k: [${cur ?: "null"}] -> ${effectiveLabel(c)}"
                 }
             }
-            val p = Settings.Global.getInt(r, POWER_KEY, -1)
-            if (p != POWER_VALUE) {
-                Settings.Global.putInt(r, POWER_KEY, POWER_VALUE)
-                changes += "$POWER_KEY: [$p] -> $POWER_VALUE"
+            if (enforcePowerKey(c)) {
+                val p = Settings.Global.getInt(r, POWER_KEY, -1)
+                if (p != POWER_VALUE) {
+                    Settings.Global.putInt(r, POWER_KEY, POWER_VALUE)
+                    changes += "$POWER_KEY: [$p] -> $POWER_VALUE"
+                }
             }
             // Khi nguoi dung tat Tro nang bang phim tat (acc_tile_off), khong tu bat lai o day
             if (prefs(c).getBoolean("mi_on", false) && !accessibilityOn(c) && !prefs(c).getBoolean("acc_tile_off", false)) {
@@ -191,7 +238,8 @@ object Restorer {
     private val cycleBusy = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /**
-     * Ngat tro ly (de trong), cho, bat lai Google va dat nut nguon = 5, roi doc lai de kiem tra.
+     * Ngat tro ly (de trong), cho, bat lai tro ly muc tieu va dat nut nguon = 5 (neu nguoi dung
+     * con bat "ghi de nut nguon"), roi doc lai de kiem tra.
      * Co Thread.sleep nen PHAI chay tren luong nen. Tra ve mo ta ket qua.
      */
     fun cycle(c: Context): String {
@@ -208,7 +256,7 @@ object Restorer {
             try {
                 Settings.Secure.putString(r, "voice_interaction_service", oldService)
                 Settings.Secure.putString(r, "assistant", oldAssistant)
-                Settings.Global.putString(r, POWER_KEY, oldPower)
+                if (enforcePowerKey(c)) Settings.Global.putString(r, POWER_KEY, oldPower)
             } catch (_: Throwable) {}
             L.fmt("Không hoàn tất: %s: %s. Đã trả về giá trị cũ.", e.javaClass.simpleName, e.message)
         } finally {
@@ -230,19 +278,20 @@ object Restorer {
         if (info == null || !info.enabled) return L.fmt("Không tìm thấy dịch vụ trợ lý %s đang bật; chưa thay đổi gì.", label)
 
         val offMs = prefs(c).getInt("cycle_off_ms", 1500).toLong()
+        val setPower = enforcePowerKey(c)
         Settings.Secure.putString(r, "voice_interaction_service", "")
         Settings.Secure.putString(r, "assistant", "")
         Thread.sleep(offMs)
 
         Settings.Secure.putString(r, "voice_interaction_service", want)
         Settings.Secure.putString(r, "assistant", want)
-        Settings.Global.putString(r, POWER_KEY, POWER_VALUE.toString())
+        if (setPower) Settings.Global.putString(r, POWER_KEY, POWER_VALUE.toString())
         Thread.sleep(1000)
 
         val ok = Settings.Secure.getString(r, "assistant") == want &&
             Settings.Secure.getString(r, "voice_interaction_service") == want &&
-            Settings.Global.getString(r, POWER_KEY) == POWER_VALUE.toString()
-        return if (ok) L.fmt("Đã tắt → bật lại %s; đọc lại đúng 3 giá trị. Hãy thử giữ nút nguồn.", label)
+            (!setPower || Settings.Global.getString(r, POWER_KEY) == POWER_VALUE.toString())
+        return if (ok) L.fmt("Đã tắt → bật lại %s; đọc lại đúng các giá trị. Hãy thử giữ nút nguồn.", label)
         else L.tr("Đã chạy nhưng HyperOS chưa giữ đúng giá trị (hệ thống có thể đã tự đổi lại). Thử bấm lại.")
     }
 
@@ -271,13 +320,17 @@ object Restorer {
         sb.append(L.tr("Trợ lý mục tiêu cho \"Gọi Gemini\": ")).append(targetLabel(c)).append(" (").append(targetPkg(c)).append(")\n")
         val cl = prefs(c).getString("chatgpt_last", "") ?: ""
         if (cl.isNotBlank()) sb.append("ChatGPT gần nhất: ").append(cl).append("\n")
+        val al = prefs(c).getString("assist_last", "") ?: ""
+        if (al.isNotBlank()) sb.append(L.tr("Gemini gần nhất: ")).append(al).append("\n")
         val wl = prefs(c).getString("wlog", "") ?: ""
         sb.append("\nNhật ký gọi Mi AI (mới nhất trước):\n").append(if (wl.isBlank()) "(chưa có)" else wl).append("\n")
         for (k in SECURE_KEYS) {
             val v = Settings.Secure.getString(r, k)
             sb.append(k).append(": ").append(if (v == assistComponent(c)) effectiveLabel(c) + " OK" else "[" + (v ?: L.tr("trống")) + "] " + L.tr("SAI")).append("\n")
         }
-        sb.append(POWER_KEY).append(": ").append(Settings.Global.getInt(r, POWER_KEY, -1)).append("\n")
+        sb.append(POWER_KEY).append(": ").append(Settings.Global.getInt(r, POWER_KEY, -1))
+        if (!enforcePowerKey(c)) sb.append(L.tr(" (không ghi đè)"))
+        sb.append("\n")
         sb.append(L.tr("Trợ năng MiAiWatcher: ")).append(if (accessibilityOn(c)) L.tr("BẬT") else L.tr("TẮT")).append(if (prefs(c).getBoolean("acc_tile_off", false)) L.tr(" (tắt bằng phím tắt Control Center)") else "").append("\n")
         sb.append(L.tr("Tắt→bật Google gần nhất: ")).append(prefs(c).getString("cycle_last", "")?.ifBlank { L.tr("(chưa chạy)") } ?: L.tr("(chưa chạy)")).append("\n")
         sb.append(L.tr("\nNhật ký tự sửa (mới nhất trước):\n"))

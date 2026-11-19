@@ -15,7 +15,13 @@ jobs:
         with: { distribution: temurin, java-version: 17 }
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: "8.9" }
-      - run: gradle assembleDebug --no-daemon
+      - name: Build debug APK
+        run: gradle assembleDebug --no-daemon
+        env:
+          # Neu chua dat secrets thi build dung mat khau mac dinh (xem app/build.gradle.kts)
+          GUARD_STORE_PASSWORD: ${{ secrets.GUARD_STORE_PASSWORD }}
+          GUARD_KEY_ALIAS: ${{ secrets.GUARD_KEY_ALIAS }}
+          GUARD_KEY_PASSWORD: ${{ secrets.GUARD_KEY_PASSWORD }}
       - run: cp app/build/outputs/apk/debug/app-debug.apk GeminiGuard-v2.0.apk
       - uses: actions/upload-artifact@v4
         with:

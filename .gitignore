@@ -1,0 +1,14 @@
+# Gradle / Android build output
+.gradle/
+build/
+app/build/
+local.properties
+
+# Local signing secrets (xem keystore.properties.example)
+keystore.properties
+
+# IDE / OS
+.idea/
+*.iml
+.DS_Store
+Thumbs.db

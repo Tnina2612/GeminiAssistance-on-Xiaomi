@@ -7,19 +7,23 @@ import android.content.Intent
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) {
         val pr = Restorer.prefs(c)
+        val watching = pr.getBoolean("enabled", true)
 
-        // Khoi dong may: tat -> bat lai Google (nhu Gemini Restore), chay nen vai giay
-        if (i.action == Intent.ACTION_BOOT_COMPLETED && pr.getBoolean("cycle_boot", true) && Restorer.hasPermission(c)) {
-            val pending = goAsync()
-            Thread {
-                try { Restorer.cycleOnBoot(c.applicationContext) } catch (_: Throwable) {}
-                finally { pending.finish() }
-            }.start()
-        } else {
-            Restorer.ensure(c)
+        // Chi ghi de cai dat khi nguoi dung con bat "Canh nen".
+        if (watching && Restorer.hasPermission(c)) {
+            // Khoi dong may: tat -> bat lai Google (nhu Gemini Restore), chay nen vai giay
+            if (i.action == Intent.ACTION_BOOT_COMPLETED && pr.getBoolean("cycle_boot", true)) {
+                val pending = goAsync()
+                Thread {
+                    try { Restorer.cycleOnBoot(c.applicationContext) } catch (_: Throwable) {}
+                    finally { pending.finish() }
+                }.start()
+            } else {
+                Restorer.ensure(c)
+            }
         }
 
-        if (pr.getBoolean("enabled", true) || pr.getBoolean("bar", false)) {
+        if (watching || pr.getBoolean("bar", false)) {
             try { c.startForegroundService(Intent(c, GuardService::class.java)) } catch (_: Exception) {}
         }
     }
