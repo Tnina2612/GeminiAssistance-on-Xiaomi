@@ -193,6 +193,7 @@ object Restorer {
      * "Ghi đè hành vi giữ nút nguồn". Nếu chưa từng lưu giá trị gốc (bản cũ đã ghi 5) thì dùng 1.
      */
     fun restorePowerKey(c: Context): String {
+        if (!DeviceProfile.isXiaomi) return L.tr("Chỉ áp dụng cho Xiaomi/HyperOS.")
         if (!hasPermission(c)) return L.tr("Chưa cấp quyền WRITE_SECURE_SETTINGS. Hãy cấp bằng ADB trước.")
         val r = c.contentResolver
         val cur = Settings.Global.getInt(r, POWER_KEY, -1)
@@ -220,8 +221,9 @@ object Restorer {
 
     fun prefs(c: Context) = c.getSharedPreferences("guard", Context.MODE_PRIVATE)
 
-    /** Nguoi dung co muon app ghi de hanh vi giu nut nguon khong (mac dinh: co). */
-    fun enforcePowerKey(c: Context) = prefs(c).getBoolean("power_key", true)
+    /** Nguoi dung co muon app ghi de hanh vi giu nut nguon khong (mac dinh: co).
+     *  Chi Xiaomi/HyperOS moi co khoa power_button_long_press; may khac tra ve false. */
+    fun enforcePowerKey(c: Context) = DeviceProfile.isXiaomi && prefs(c).getBoolean("power_key", true)
 
     fun hasPermission(c: Context) =
         c.checkSelfPermission("android.permission.WRITE_SECURE_SETTINGS") == PackageManager.PERMISSION_GRANTED
@@ -351,6 +353,7 @@ object Restorer {
         val r = c.contentResolver
         val sb = StringBuilder()
         sb.append(L.tr("Quyền WRITE_SECURE_SETTINGS: ")).append(if (hasPermission(c)) "OK" else L.tr("CHƯA CẤP")).append("\n")
+        sb.append(L.tr("Thiết bị: ")).append(DeviceProfile.label()).append("\n")
         sb.append(L.tr("Trợ lý mục tiêu cho \"Gọi Gemini\": ")).append(targetLabel(c)).append(" (").append(targetPkg(c)).append(")\n")
         val cl = prefs(c).getString("chatgpt_last", "") ?: ""
         if (cl.isNotBlank()) sb.append("ChatGPT gần nhất: ").append(cl).append("\n")
@@ -362,11 +365,15 @@ object Restorer {
             val v = Settings.Secure.getString(r, k)
             sb.append(k).append(": ").append(if (v == assistComponent(c)) effectiveLabel(c) + " OK" else "[" + (v ?: L.tr("trống")) + "] " + L.tr("SAI")).append("\n")
         }
-        sb.append(POWER_KEY).append(": ").append(Settings.Global.getInt(r, POWER_KEY, -1))
-        val porig = powerOriginal(c)
-        if (porig >= 0) sb.append(L.fmt(" (gốc đã lưu: %d)", porig))
-        if (!enforcePowerKey(c)) sb.append(L.tr(" (không ghi đè)"))
-        sb.append("\n")
+        if (DeviceProfile.isXiaomi) {
+            sb.append(POWER_KEY).append(": ").append(Settings.Global.getInt(r, POWER_KEY, -1))
+            val porig = powerOriginal(c)
+            if (porig >= 0) sb.append(L.fmt(" (gốc đã lưu: %d)", porig))
+            if (!enforcePowerKey(c)) sb.append(L.tr(" (không ghi đè)"))
+            sb.append("\n")
+        } else {
+            sb.append(POWER_KEY).append(": ").append(L.tr("không áp dụng (chỉ Xiaomi/HyperOS)")).append("\n")
+        }
         sb.append(L.tr("Trợ năng MiAiWatcher: ")).append(if (accessibilityOn(c)) L.tr("BẬT") else L.tr("TẮT")).append(if (prefs(c).getBoolean("acc_tile_off", false)) L.tr(" (tắt bằng phím tắt Control Center)") else "").append("\n")
         sb.append(L.tr("Tắt→bật Google gần nhất: ")).append(prefs(c).getString("cycle_last", "")?.ifBlank { L.tr("(chưa chạy)") } ?: L.tr("(chưa chạy)")).append("\n")
         sb.append(L.tr("\nNhật ký tự sửa (mới nhất trước):\n"))

@@ -33,7 +33,7 @@ class MiAiWatcher : AccessibilityService() {
 
         remember(pkg, "$pkg  ${e.className}")
 
-        val targets = (pr.getString("mi_pkgs", DEFAULT_PKGS) ?: DEFAULT_PKGS)
+        val targets = (pr.getString("mi_pkgs", defaultPkgs()) ?: defaultPkgs())
             .split(",", ";", " ", "\n").map { it.trim() }.filter { it.isNotEmpty() }
         if (pkg !in targets) return
 
@@ -41,8 +41,8 @@ class MiAiWatcher : AccessibilityService() {
         wlog("Mi AI: $cls")
 
         // Loc theo ten cua so: chi lop phu giong noi moi goi Gemini, mo app / dich man hinh thi bo qua
-        val exc = pr.getString("mi_exc", DEFAULT_EXC) ?: ""
-        val inc = pr.getString("mi_inc", DEFAULT_INC) ?: ""
+        val exc = pr.getString("mi_exc", defaultExc()) ?: ""
+        val inc = pr.getString("mi_inc", defaultInc()) ?: ""
         if (exc.isNotBlank() && matches(exc, cls)) { wlog("→ bỏ qua (thuộc danh sách bỏ qua)"); return }
         if (inc.isNotBlank() && !matches(inc, cls)) { wlog("→ bỏ qua (không thuộc danh sách giọng nói)"); return }
 
@@ -200,11 +200,11 @@ class MiAiWatcher : AccessibilityService() {
     private fun applyInfo(notImportant: Boolean = false) {
         try {
             val pr = Restorer.prefs(this)
-            val pk = (pr.getString("mi_pkgs", DEFAULT_PKGS) ?: DEFAULT_PKGS)
+            val pk = (pr.getString("mi_pkgs", defaultPkgs()) ?: defaultPkgs())
                 .split(",", ";", " ", "\n").map { it.trim() }.filter { it.isNotEmpty() }
             // Luon gom Google + app dich + goi dich man hinh: Google de nhan hieu ung am thanh
             // ke ca khi target la ChatGPT; goi dich de clickCardByText thay cua so app dich.
-            val tr = (pr.getString("tr_pkg", BarOverlay.TR_PKG) ?: "").trim()
+            val tr = (pr.getString("tr_pkg", BarOverlay.defaultTrPkg()) ?: "").trim()
             val pkgs = (pk + Restorer.targetPkg(this) + Restorer.GOOGLE_PKG + tr)
                 .filter { it.isNotBlank() }.distinct().toTypedArray()
             val types = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
@@ -282,8 +282,17 @@ class MiAiWatcher : AccessibilityService() {
         const val DEFAULT_INC = "android.widget.FrameLayout"
         const val DEFAULT_EXC = "com.xiaomi.voiceassistant.mainui.navigator.MainNavigatorActivity"
         const val GOOGLE_PKG = "com.google.android.googlequicksearchbox"
+
+        /** Goi y theo hang may; nguoi dung van co the sua trong phan cai dat. */
+        fun defaultPkgs(): String =
+            if (DeviceProfile.isHonor) "com.hihonor.assistant,com.hihonor.magicvoice" else DEFAULT_PKGS
+        /** YOYO khong dung FrameLayout lam lop phu giong noi nhu Mi AI, nen de trong = moi cua so. */
+        fun defaultInc(): String = if (DeviceProfile.isHonor) "" else DEFAULT_INC
+        fun defaultExc(): String = if (DeviceProfile.isHonor) "" else DEFAULT_EXC
+
         private val IGNORE = setOf(
             "com.android.systemui", "com.miui.home", "com.mi.android.globallauncher",
+            "com.hihonor.android.launcher",
             "com.google.android.googlequicksearchbox", "com.android.settings", "android"
         )
     }

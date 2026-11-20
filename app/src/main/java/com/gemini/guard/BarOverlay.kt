@@ -191,7 +191,7 @@ class BarOverlay(private val ctx: Context) {
      */
     private fun launchTranslate() {
         val pr = Restorer.prefs(ctx)
-        val pkg = (pr.getString("tr_pkg", TR_PKG) ?: "").trim()
+        val pkg = (pr.getString("tr_pkg", defaultTrPkg()) ?: "").trim()
         val texts = (pr.getString("tr_text", TR_TEXT) ?: "").split(",", ";", "\n").map { it.trim() }.filter { it.isNotEmpty() }
         if (pkg.isEmpty()) { Toast.makeText(ctx, L.tr("Chưa nhập tên gói / chữ trên thẻ dịch"), Toast.LENGTH_LONG).show(); return }
         val i = ctx.packageManager.getLaunchIntentForPackage(pkg)
@@ -227,6 +227,9 @@ class BarOverlay(private val ctx: Context) {
 
         const val TR_PKG = "com.xiaomi.aiasst.vision"
         const val TR_TEXT = "Dịch màn hình,Screen translation"
+
+        /** App Dich cua Xiaomi chi co tren may Xiaomi; may khac de trong cho nguoi dung tu nhap. */
+        fun defaultTrPkg(): String = if (DeviceProfile.isXiaomi) TR_PKG else ""
 
         /** Vi tri cao nhat cua thanh (dp) tinh tu day man hinh. */
         const val MAX_Y_DP = 200

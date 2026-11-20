@@ -328,15 +328,24 @@ class MainActivity : Activity() {
         Toast.makeText(this, toast, Toast.LENGTH_SHORT).show()
     }
 
-    private fun openMiuiPerms() {
-        try {
-            startActivity(Intent("miui.intent.action.APP_PERM_EDITOR")
-                .setClassName("com.miui.securitycenter", "com.miui.permcenter.permissions.PermissionsEditorActivity")
-                .putExtra("extra_pkgname", packageName))
-        } catch (_: Exception) {
-            openAppSettings()
-            Toast.makeText(this, L.tr("Vào Quyền → Quyền khác, bật \"Hiển thị cửa sổ pop-up khi chạy nền\"."), Toast.LENGTH_LONG).show()
+    private fun openBackgroundPerms() {
+        val candidates = listOf(
+            ComponentName("com.miui.securitycenter", "com.miui.permcenter.permissions.PermissionsEditorActivity"),
+            ComponentName("com.hihonor.systemmanager", "com.hihonor.systemmanager.appcontrol.activity.StartupAppControlActivity"),
+            ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity")
+        )
+        for (cn in candidates) {
+            try {
+                val i = Intent().setComponent(cn)
+                if (cn.packageName == "com.miui.securitycenter") i.putExtra("extra_pkgname", packageName)
+                startActivity(i)
+                return
+            } catch (_: Exception) {}
         }
+        openAppSettings()
+        val msg = if (DeviceProfile.isXiaomi) L.tr("Vào Quyền → Quyền khác, bật \"Hiển thị cửa sổ pop-up khi chạy nền\".")
+                  else L.tr("Vào phần quyền của app, bật quyền hiển thị cửa sổ pop-up và cho phép chạy nền.")
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
     }
 
     private fun openAppSettings() =
@@ -367,13 +376,17 @@ class MainActivity : Activity() {
     }
 
     private fun openAutostart() {
-        try {
-            startActivity(Intent().setComponent(ComponentName(
-                "com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity")))
-        } catch (_: Exception) {
-            openAppSettings()
-            Toast.makeText(this, L.tr("Tìm Tự khởi động / Autostart rồi bật Gemini Guard."), Toast.LENGTH_LONG).show()
+        val candidates = listOf(
+            ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"),
+            ComponentName("com.hihonor.systemmanager", "com.hihonor.systemmanager.startupmgr.ui.StartupNormalAppListActivity"),
+            ComponentName("com.hihonor.systemmanager", "com.hihonor.systemmanager.appcontrol.activity.StartupAppControlActivity"),
+            ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity")
+        )
+        for (cn in candidates) {
+            try { startActivity(Intent().setComponent(cn)); return } catch (_: Exception) {}
         }
+        openAppSettings()
+        Toast.makeText(this, L.tr("Tìm Tự khởi động / Autostart rồi bật Gemini Guard."), Toast.LENGTH_LONG).show()
     }
 
     // ---------- Màn hình chính ----------
@@ -421,6 +434,10 @@ class MainActivity : Activity() {
                 L.tr("(máy sẽ hiện bảng “Complete action using” và mở app Google). Hãy cấp bằng ADB. ") +
                 L.tr("Khi cập nhật, cài đè lên bản cũ và đừng gỡ cài đặt, vì gỡ sẽ mất quyền."),
             13f, INK).apply { setPadding(0, dp(6), 0, 0) })
+        if (DeviceProfile.isHonor)
+            warnCard.addView(label(
+                L.tr("Trên Honor/MagicOS, nếu lệnh ADB báo lỗi, hãy bật \"Tắt giám sát quyền\" (Disable permission monitoring) trong Tùy chọn nhà phát triển rồi chạy lại."),
+                12f, MUTED).apply { setPadding(0, dp(8), 0, 0) })
         btn(warnCard, L.tr("Sao chép lệnh ADB cấp quyền"), primary = true) {
             copy("adb", "adb shell pm grant $packageName android.permission.WRITE_SECURE_SETTINGS", L.tr("Đã sao chép lệnh ADB"))
         }
@@ -436,15 +453,28 @@ class MainActivity : Activity() {
 
         // 1. Giữ Gemini
         val c1 = card(root, L.tr("Giữ Gemini làm trợ lý"),
-            L.tr("Canh các cài đặt hệ thống, nếu HyperOS xóa hoặc đổi sang Mi AI thì tự ghi lại Google."))
+            L.tr("Canh cài đặt hệ thống; nếu trợ lý bị xóa hoặc đổi sang app khác thì tự ghi lại Google."))
         sw(c1, L.tr("Canh nền và tự khôi phục Google"), null, "enabled", true)
-        val powerSwitch = sw(c1, L.tr("Ghi đè hành vi giữ nút nguồn"),
-            L.tr("Tắt nếu bạn muốn giữ nguyên hành vi gốc của nút nguồn (menu nguồn, đèn pin…). Khi tắt, app tự trả lại giá trị cũ cho nút nguồn."),
-            "power_key", true)
-        btn(c1, L.tr("Trả lại menu nguồn ngay"), top = 8) {
-            prefs().edit().putBoolean("power_key", false).apply()
-            if (powerSwitch.isChecked) powerSwitch.isChecked = false
-            else Toast.makeText(this, Restorer.restorePowerKey(this), Toast.LENGTH_LONG).show()
+        if (DeviceProfile.isXiaomi) {
+            val powerSwitch = sw(c1, L.tr("Ghi đè hành vi giữ nút nguồn"),
+                L.tr("Tắt nếu bạn muốn giữ nguyên hành vi gốc của nút nguồn (menu nguồn, đèn pin…). Khi tắt, app tự trả lại giá trị cũ cho nút nguồn."),
+                "power_key", true)
+            btn(c1, L.tr("Trả lại menu nguồn ngay"), top = 8) {
+                prefs().edit().putBoolean("power_key", false).apply()
+                if (powerSwitch.isChecked) powerSwitch.isChecked = false
+                else Toast.makeText(this, Restorer.restorePowerKey(this), Toast.LENGTH_LONG).show()
+            }
+        } else {
+            c1.addView(label(
+                L.tr("Máy này không phải Xiaomi/HyperOS nên app không ghi đè nút nguồn. Hãy đặt Gemini làm trợ lý mặc định trong Cài đặt của máy."),
+                12f, MUTED).apply { setPadding(0, dp(10), 0, 0) })
+            btn(c1, L.tr("Mở cài đặt trợ lý mặc định"), top = 8) {
+                try { startActivity(Intent("android.settings.MANAGE_DEFAULT_APPS_SETTINGS")) }
+                catch (_: Exception) {
+                    try { startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)) }
+                    catch (_: Exception) { openAppSettings() }
+                }
+            }
         }
         btn(c1, L.tr("Khôi phục ngay"), primary = true) {
             val ch = Restorer.ensure(this)
@@ -459,10 +489,10 @@ class MainActivity : Activity() {
             }.start()
         }
         sw(c1, L.tr("Tự tắt → bật lại Google sau khi khởi động máy"),
-            L.tr("Để giữ nút nguồn gọi Google thay vì Mi AI sau mỗi lần khởi động. Cần bật Tự khởi động cho app."),
+            L.tr("Để hệ thống nhận lại Google sau mỗi lần khởi động. Cần bật Tự khởi động cho app."),
             "cycle_boot", true)
         seek(c1, L.tr("Đợi sau khi máy khởi động xong"), L.tr(" giây"), "cycle_boot_delay_s", 30, 0)
-        btn(c1, L.tr("Cho phép tự khởi động trên HyperOS"), top = 8) { openAutostart() }
+        btn(c1, L.tr("Cho phép tự khởi động (chống bị dừng)"), top = 8) { openAutostart() }
 
         // 2. Thanh điều hướng AI
         val c2 = card(root, L.tr("Thanh điều hướng AI"),
@@ -475,7 +505,8 @@ class MainActivity : Activity() {
         bindField(ctsPkg, "cts_pkg")
         choice(c2, L.tr("Chạm đúp"), "bar_dt")
         choice(c2, L.tr("Giữ"), "bar_lp")
-        trPkg = field(c2, L.tr("Dịch màn hình: tên gói app dịch"), "com.xiaomi.aiasst.vision", prefs().getString("tr_pkg", BarOverlay.TR_PKG) ?: "")
+        trPkg = field(c2, L.tr("Dịch màn hình: tên gói app dịch"), BarOverlay.defaultTrPkg().ifEmpty { L.tr("Để trống nếu không dùng") },
+            prefs().getString("tr_pkg", BarOverlay.defaultTrPkg()) ?: "")
         bindPref(trPkg, "tr_pkg")
         trTxt = field(c2, L.tr("Dịch màn hình: chữ trên thẻ (phân cách bằng dấu phẩy)"), BarOverlay.TR_TEXT, prefs().getString("tr_text", BarOverlay.TR_TEXT) ?: "")
         bindPref(trTxt, "tr_text")
@@ -487,13 +518,20 @@ class MainActivity : Activity() {
         // 3. Mi AI
         val c3 = card(root, L.tr("Gọi Gemini khi Mi AI bật lên") + L.tr(" (không dùng được ngân hàng và VNeID, muốn dùng phải tắt đi)"),
             L.tr("Khi phát hiện Mi AI (giữ nút nguồn, gọi giọng nói…), app đóng nó (bấm Back và chạm vào chỗ trống) rồi gọi Gemini lên thay thế. Cần bật Trợ năng cho Gemini Guard – nhiều app ngân hàng và VNeID sẽ chặn hoặc cảnh báo khi Trợ năng đang bật, nên tắt mục này (và tắt Trợ năng) trước khi dùng các app đó."))
+        if (DeviceProfile.isHonor)
+            c3.addView(label(L.tr("Trên Honor/MagicOS: \"Mi AI\" ở đây là YOYO; mặc định đã điền sẵn tên gói YOYO."),
+                12f, MUTED).apply { setPadding(0, dp(2), 0, dp(4)) })
         sw(c3, L.tr("Tự gọi Gemini khi Mi AI bật lên"), null, "mi_on", false)
         pickRow(c3, L.tr("Gọi đến"), "target_pkg",
             listOf(Restorer.GOOGLE_PKG to "Gemini (Google)", Restorer.CHATGPT_PKG to "ChatGPT"), Restorer.GOOGLE_PKG)
-        sw(c3, L.tr("Đặt ChatGPT làm trợ lý hệ thống (giữ nút nguồn cũng mở ChatGPT)"),
-            L.tr("Tắt (mặc định): ChatGPT chỉ được gọi khi Mi AI bật, nút nguồn vẫn mở Gemini. Bật: sau khi bật phải bấm \"Tắt → bật lại\" ở thẻ đầu để hệ thống đổi trợ lý."),
+        sw(c3, L.tr("Đặt ChatGPT làm trợ lý hệ thống"),
+            L.tr("Tắt (mặc định): ChatGPT chỉ được gọi khi Mi AI bật, trợ lý hệ thống vẫn là Gemini. Bật: sau khi bật phải bấm \"Tắt → bật lại\" ở thẻ đầu để hệ thống đổi trợ lý."),
             "sys_chatgpt", false)
-        c3.addView(label(L.tr("Khi Mi AI bật lên, nếu chọn ChatGPT thì app mở lớp phủ ChatGPT thay cho Gemini (qua màn hình trợ lý ChatGPT cho phép gọi), còn Gemini vẫn là trợ lý hệ thống nên giữ nút nguồn vẫn mở Gemini. Muốn cả nút nguồn mở ChatGPT thì bật công tắc bên dưới."), 12f, MUTED).apply { setPadding(0, dp(2), 0, dp(6)) })
+        val chatgptNote = if (DeviceProfile.isXiaomi)
+            L.tr("Khi Mi AI bật lên, nếu chọn ChatGPT thì app mở lớp phủ ChatGPT thay cho Gemini (qua màn hình trợ lý ChatGPT cho phép gọi), còn Gemini vẫn là trợ lý hệ thống nên giữ nút nguồn vẫn mở Gemini. Muốn cả nút nguồn mở ChatGPT thì bật công tắc bên dưới.")
+        else
+            L.tr("Khi Mi AI bật lên, nếu chọn ChatGPT thì app mở lớp phủ ChatGPT thay cho Gemini. Trên máy này app không đổi được hành vi nút nguồn.")
+        c3.addView(label(chatgptNote, 12f, MUTED).apply { setPadding(0, dp(2), 0, dp(6)) })
         btn(c3, L.tr("Thử mở lớp phủ ChatGPT sau 5 giây (bấm Home ngay)"), top = 8) {
             Toast.makeText(this, L.tr("Hãy bấm Home ngay, sau 5 giây app sẽ thử mở ChatGPT từ nền"), Toast.LENGTH_LONG).show()
             val app = applicationContext
@@ -504,18 +542,24 @@ class MainActivity : Activity() {
             (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("chatgpt", txt))
             Toast.makeText(this, L.tr("Đã sao chép chẩn đoán ChatGPT, dán vào chat gửi cho Claude"), Toast.LENGTH_LONG).show()
         }
-        btn(c3, L.tr("Cấp quyền cửa sổ pop-up khi chạy nền (HyperOS)"), top = 8) { openMiuiPerms() }
-        c3.addView(label(L.tr("HyperOS thường chặn app mở cửa sổ khi chạy nền mà không báo lỗi. Nếu ChatGPT không hiện khi Mi AI bật, hãy bật quyền \"Hiển thị cửa sổ pop-up khi chạy nền\" ở nút trên."), 12f, MUTED).apply { setPadding(0, dp(4), 0, 0) })
+        btn(c3, L.tr("Cấp quyền cửa sổ pop-up khi chạy nền"), top = 8) { openBackgroundPerms() }
+        c3.addView(label(
+            if (DeviceProfile.isXiaomi)
+                L.tr("HyperOS thường chặn app mở cửa sổ khi chạy nền mà không báo lỗi. Nếu ChatGPT không hiện khi Mi AI bật, hãy bật quyền \"Hiển thị cửa sổ pop-up khi chạy nền\" ở nút trên.")
+            else
+                L.tr("MagicOS/Android thường chặn app mở cửa sổ khi chạy nền. Nếu trợ lý không hiện, hãy bật quyền hiển thị cửa sổ pop-up và cho phép app chạy nền ở nút trên."),
+            12f, MUTED).apply { setPadding(0, dp(4), 0, 0) })
         seek(c3, L.tr("Vị trí chạm – ngang"), "%", "mi_tx", 100, 8)
         seek(c3, L.tr("Vị trí chạm – dọc"), "%", "mi_ty", 100, 10)
         seek(c3, L.tr("Chờ trước khi chạm đóng Mi AI (0 = nhanh nhất)"), " ms", "mi_tapwait", 400, 0)
         seek(c3, L.tr("Độ trễ trước khi gọi Gemini"), " ms", "mi_delay", 1500, 350)
-        miPkgs = field(c3, L.tr("Tên gói Mi AI (cách nhau bằng dấu phẩy)"), "com.miui.voiceassist",
-            prefs().getString("mi_pkgs", MiAiWatcher.DEFAULT_PKGS) ?: "")
+        miPkgs = field(c3, L.tr("Tên gói trợ lý cần theo dõi (Mi AI / YOYO)"),
+            if (DeviceProfile.isHonor) "com.hihonor.assistant, com.hihonor.magicvoice" else "com.miui.voiceassist",
+            prefs().getString("mi_pkgs", MiAiWatcher.defaultPkgs()) ?: "")
         bindField(miPkgs, "mi_pkgs")
-        miInc = field(c3, L.tr("Chỉ gọi Gemini khi cửa sổ Mi AI là (để trống = mọi cửa sổ)"), L.tr("Để trống = mọi cửa sổ"), prefs().getString("mi_inc", MiAiWatcher.DEFAULT_INC) ?: "")
+        miInc = field(c3, L.tr("Chỉ gọi Gemini khi cửa sổ Mi AI là (để trống = mọi cửa sổ)"), L.tr("Để trống = mọi cửa sổ"), prefs().getString("mi_inc", MiAiWatcher.defaultInc()) ?: "")
         bindPref(miInc, "mi_inc")
-        miExc = field(c3, L.tr("Bỏ qua khi cửa sổ Mi AI là (mở app, dịch màn hình…)"), L.tr("Để trống = không bỏ qua cửa sổ nào"), prefs().getString("mi_exc", MiAiWatcher.DEFAULT_EXC) ?: "")
+        miExc = field(c3, L.tr("Bỏ qua khi cửa sổ Mi AI là (mở app, dịch màn hình…)"), L.tr("Để trống = không bỏ qua cửa sổ nào"), prefs().getString("mi_exc", MiAiWatcher.defaultExc()) ?: "")
         bindPref(miExc, "mi_exc")
         btn(c3, L.tr("Đặt lại bộ lọc về mặc định"), top = 12) {
             prefs().edit().remove("mi_inc").remove("mi_exc").apply()
@@ -578,7 +622,7 @@ class MainActivity : Activity() {
 
     private fun refresh() {
         for ((e, k) in listOf(miInc to "mi_inc", miExc to "mi_exc")) {
-            val v = prefs().getString(k, if (k == "mi_inc") MiAiWatcher.DEFAULT_INC else MiAiWatcher.DEFAULT_EXC) ?: ""
+            val v = prefs().getString(k, if (k == "mi_inc") MiAiWatcher.defaultInc() else MiAiWatcher.defaultExc()) ?: ""
             if (e.text.toString().trim() != v) e.setText(v)
         }
         val hasPerm = Restorer.hasPermission(this)
