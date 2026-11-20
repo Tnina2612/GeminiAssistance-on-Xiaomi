@@ -36,6 +36,7 @@ class BarOverlay(private val ctx: Context) {
         val dm = ctx.resources.displayMetrics
         val w = dm.widthPixels * p.getInt("bar_w", 40) / 100
         val h = (dm.density * p.getInt("bar_h", 20)).toInt().coerceAtLeast(8)
+        val minY = (dm.density * MIN_Y_DP).toInt()
         val maxY = (dm.density * MAX_Y_DP).toInt()
         val alpha = p.getInt("bar_a", 30) * 255 / 100
 
@@ -47,7 +48,7 @@ class BarOverlay(private val ctx: Context) {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            this.y = (dm.density * p.getInt("bar_y", 0)).toInt().coerceIn(0, maxY)
+            this.y = (dm.density * p.getInt("bar_y", MIN_Y_DP)).toInt().coerceIn(minY, maxY)
         }
 
         val v = View(ctx)
@@ -99,7 +100,7 @@ class BarOverlay(private val ctx: Context) {
                         v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     }
                     if (dragging) {
-                        lp.y = (startY - (e.rawY - downRawY)).toInt().coerceIn(0, maxY)
+                        lp.y = (startY - (e.rawY - downRawY)).toInt().coerceIn(minY, maxY)
                         try { wm.updateViewLayout(v, lp) } catch (_: Exception) {}
                     }
                 }
@@ -107,7 +108,7 @@ class BarOverlay(private val ctx: Context) {
                     if (dragging) {
                         // Luu vi tri theo dp de giu nguyen khi doi mat do man hinh / xoay may.
                         Restorer.prefs(ctx).edit()
-                            .putInt("bar_y", (lp.y / dm.density).toInt().coerceIn(0, MAX_Y_DP)).apply()
+                            .putInt("bar_y", (lp.y / dm.density).toInt().coerceIn(MIN_Y_DP, MAX_Y_DP)).apply()
                         dragging = false
                     } else gd.onTouchEvent(e)
                 }
@@ -229,5 +230,8 @@ class BarOverlay(private val ctx: Context) {
 
         /** Vi tri cao nhat cua thanh (dp) tinh tu day man hinh. */
         const val MAX_Y_DP = 200
+
+        /** Vi tri thap nhat (dp) de thanh nam tren vung cu chi dieu huong cua he thong. */
+        const val MIN_Y_DP = 32
     }
 }

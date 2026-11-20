@@ -175,7 +175,37 @@ object Restorer {
     }
 
     private const val POWER_KEY = "power_button_long_press"
-    private const val POWER_VALUE = 5
+    private const val POWER_VALUE = 5          // 5 = mo tro ly (assistant)
+    private const val POWER_ORIG = "power_orig"
+
+    /** Giá trị gốc của nút nguồn trước khi app ghi đè; -1 = chưa lưu. */
+    fun powerOriginal(c: Context): Int = prefs(c).getInt(POWER_ORIG, -1)
+
+    /** Lưu giá trị gốc một lần trước khi ghi đè 5 (bỏ qua nếu đã lưu hoặc đang là 5). */
+    private fun rememberPower(c: Context, cur: Int) {
+        if (cur < 0 || cur == POWER_VALUE) return
+        if (prefs(c).contains(POWER_ORIG)) return
+        prefs(c).edit().putInt(POWER_ORIG, cur).apply()
+    }
+
+    /**
+     * Trả lại hành vi gốc cho nút nguồn (thường là 1 = menu nguồn). Gọi khi người dùng tắt
+     * "Ghi đè hành vi giữ nút nguồn". Nếu chưa từng lưu giá trị gốc (bản cũ đã ghi 5) thì dùng 1.
+     */
+    fun restorePowerKey(c: Context): String {
+        if (!hasPermission(c)) return L.tr("Chưa cấp quyền WRITE_SECURE_SETTINGS. Hãy cấp bằng ADB trước.")
+        val r = c.contentResolver
+        val cur = Settings.Global.getInt(r, POWER_KEY, -1)
+        val orig = powerOriginal(c).let { if (it >= 0) it else 1 }
+        return try {
+            if (cur != orig) Settings.Global.putInt(r, POWER_KEY, orig)
+            prefs(c).edit().remove(POWER_ORIG).apply()
+            log(c, L.fmt("Trả lại nút nguồn: [%d] -> %d", cur, orig))
+            L.fmt("Đã trả lại hành vi gốc của nút nguồn (giá trị %d). Giữ nút nguồn để thử menu nguồn.", orig)
+        } catch (e: SecurityException) {
+            L.tr("Lỗi quyền: ") + e.message
+        }
+    }
 
     const val ACC_KEY = "enabled_accessibility_services"
 
@@ -214,6 +244,7 @@ object Restorer {
             if (enforcePowerKey(c)) {
                 val p = Settings.Global.getInt(r, POWER_KEY, -1)
                 if (p != POWER_VALUE) {
+                    rememberPower(c, p)
                     Settings.Global.putInt(r, POWER_KEY, POWER_VALUE)
                     changes += "$POWER_KEY: [$p] -> $POWER_VALUE"
                 }
@@ -285,7 +316,10 @@ object Restorer {
 
         Settings.Secure.putString(r, "voice_interaction_service", want)
         Settings.Secure.putString(r, "assistant", want)
-        if (setPower) Settings.Global.putString(r, POWER_KEY, POWER_VALUE.toString())
+        if (setPower) {
+            rememberPower(c, Settings.Global.getInt(r, POWER_KEY, -1))
+            Settings.Global.putString(r, POWER_KEY, POWER_VALUE.toString())
+        }
         Thread.sleep(1000)
 
         val ok = Settings.Secure.getString(r, "assistant") == want &&
@@ -329,6 +363,8 @@ object Restorer {
             sb.append(k).append(": ").append(if (v == assistComponent(c)) effectiveLabel(c) + " OK" else "[" + (v ?: L.tr("trống")) + "] " + L.tr("SAI")).append("\n")
         }
         sb.append(POWER_KEY).append(": ").append(Settings.Global.getInt(r, POWER_KEY, -1))
+        val porig = powerOriginal(c)
+        if (porig >= 0) sb.append(L.fmt(" (gốc đã lưu: %d)", porig))
         if (!enforcePowerKey(c)) sb.append(L.tr(" (không ghi đè)"))
         sb.append("\n")
         sb.append(L.tr("Trợ năng MiAiWatcher: ")).append(if (accessibilityOn(c)) L.tr("BẬT") else L.tr("TẮT")).append(if (prefs(c).getBoolean("acc_tile_off", false)) L.tr(" (tắt bằng phím tắt Control Center)") else "").append("\n")

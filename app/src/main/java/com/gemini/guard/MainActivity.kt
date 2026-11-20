@@ -162,14 +162,22 @@ class MainActivity : Activity() {
         return c
     }
 
-    private fun sw(p: LinearLayout, text: String, hint: String?, key: String, def: Boolean) {
+    private fun sw(p: LinearLayout, text: String, hint: String?, key: String, def: Boolean): Switch {
         val s = Switch(this).apply {
             this.text = text; textSize = 15f; setTextColor(INK)
             isChecked = prefs().getBoolean(key, def)
-            setOnCheckedChangeListener { _, on -> prefs().edit().putBoolean(key, on).apply(); pushService(); refresh() }
+            setOnCheckedChangeListener { _, on ->
+                prefs().edit().putBoolean(key, on).apply()
+                // Tắt ghi đè nút nguồn -> trả lại ngay giá trị gốc (menu nguồn).
+                if (key == "power_key" && !on) {
+                    Toast.makeText(this@MainActivity, Restorer.restorePowerKey(this@MainActivity), Toast.LENGTH_LONG).show()
+                }
+                pushService(); refresh()
+            }
         }
         p.addView(s, lp(14))
         if (hint != null) p.addView(label(hint, 12f, MUTED).apply { setPadding(0, dp(2), 0, 0) }, lp(0))
+        return s
     }
 
     /** Chon ngon ngu giao dien: tu dong / English / Tieng Viet. */
@@ -422,14 +430,22 @@ class MainActivity : Activity() {
         val st = card(root, L.tr("Trạng thái"))
         stateBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         st.addView(stateBox, lp(8))
+        st.addView(label(
+            L.tr("Dòng \"Trợ năng (theo dõi Mi AI)\" và \"MiCTS\" là tùy chọn: chỉ cần khi bạn muốn tự gọi Gemini lúc Mi AI hiện lên, hoặc gán cử chỉ thanh nổi cho MiCTS. Để tắt / chưa cài vẫn dùng được các chức năng chính."),
+            12f, MUTED).apply { setPadding(0, dp(6), 0, 0) })
 
         // 1. Giữ Gemini
         val c1 = card(root, L.tr("Giữ Gemini làm trợ lý"),
             L.tr("Canh các cài đặt hệ thống, nếu HyperOS xóa hoặc đổi sang Mi AI thì tự ghi lại Google."))
         sw(c1, L.tr("Canh nền và tự khôi phục Google"), null, "enabled", true)
-        sw(c1, L.tr("Ghi đè hành vi giữ nút nguồn"),
-            L.tr("Tắt nếu bạn muốn giữ nguyên hành vi gốc của nút nguồn (menu nguồn, đèn pin…). Tắt chỉ ngừng ghi đè, không tự trả lại giá trị cũ."),
+        val powerSwitch = sw(c1, L.tr("Ghi đè hành vi giữ nút nguồn"),
+            L.tr("Tắt nếu bạn muốn giữ nguyên hành vi gốc của nút nguồn (menu nguồn, đèn pin…). Khi tắt, app tự trả lại giá trị cũ cho nút nguồn."),
             "power_key", true)
+        btn(c1, L.tr("Trả lại menu nguồn ngay"), top = 8) {
+            prefs().edit().putBoolean("power_key", false).apply()
+            if (powerSwitch.isChecked) powerSwitch.isChecked = false
+            else Toast.makeText(this, Restorer.restorePowerKey(this), Toast.LENGTH_LONG).show()
+        }
         btn(c1, L.tr("Khôi phục ngay"), primary = true) {
             val ch = Restorer.ensure(this)
             Toast.makeText(this, if (ch.isEmpty()) L.tr("Mọi thứ đã đúng") else L.fmt("Đã sửa %d mục", ch.size), Toast.LENGTH_SHORT).show()
@@ -465,7 +481,7 @@ class MainActivity : Activity() {
         bindPref(trTxt, "tr_text")
         seek(c2, L.tr("Chiều rộng"), "%", "bar_w", 100, 40)
         seek(c2, L.tr("Chiều cao"), " dp", "bar_h", 60, 20)
-        seek(c2, L.tr("Cách đáy (kéo thanh để đổi)"), " dp", "bar_y", BarOverlay.MAX_Y_DP, 0)
+        seek(c2, L.tr("Cách đáy (kéo thanh để đổi)"), " dp", "bar_y", BarOverlay.MAX_Y_DP, BarOverlay.MIN_Y_DP)
         seek(c2, L.tr("Độ đậm (0 = vô hình)"), "%", "bar_a", 100, 30)
 
         // 3. Mi AI
