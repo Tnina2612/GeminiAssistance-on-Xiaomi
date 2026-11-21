@@ -262,6 +262,8 @@ object L {
         "Tắt nếu bạn muốn tự quản lý mục này. Mặc định bật." to "Turn off if you want to manage this key yourself. On by default.",
         "Giữ dịch vụ giọng nói (voice_interaction_service)" to "Keep the voice service (voice_interaction_service)",
         "Thường phải bật cùng mục trên để nút nguồn và trợ lý hoạt động đúng. Mặc định bật." to "Usually must be on together with the option above for the power button and assistant to work. On by default.",
+        "Giữ Google sẵn sàng (giảm độ trễ)" to "Keep Google warm (reduce delay)",
+        "Giữ tiến trình Google ở trạng thái ấm để cử chỉ/gọi trợ lý hiện nhanh hơn. Có thể tốn thêm một ít pin." to "Keeps the Google process warm so the gesture/assistant appears faster. May use a little extra battery.",
         "Khác (nhập tên gói)" to "Other (enter package name)",
         "Tên gói trợ lý khác (dùng khi chọn Khác)" to "Other assistant package name (used when Other is selected)",
         "API ngoài dùng để Tasker/MacroDroid gọi trợ lý hoặc bật/tắt thanh. Cần gửi extra token. Hành động: " to "The external API lets Tasker/MacroDroid call the assistant or toggle the bar. You must send the token extra. Actions: ",

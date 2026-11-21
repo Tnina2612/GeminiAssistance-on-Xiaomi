@@ -546,6 +546,9 @@ class MainActivity : Activity() {
         sw(c1, L.tr("Giữ dịch vụ giọng nói (voice_interaction_service)"),
             L.tr("Thường phải bật cùng mục trên để nút nguồn và trợ lý hoạt động đúng. Mặc định bật."),
             "keep_voice", true)
+        sw(c1, L.tr("Giữ Google sẵn sàng (giảm độ trễ)"),
+            L.tr("Giữ tiến trình Google ở trạng thái ấm để cử chỉ/gọi trợ lý hiện nhanh hơn. Có thể tốn thêm một ít pin."),
+            "warm_google", true)
         if (DeviceProfile.isXiaomi) {
             val powerSwitch = sw(c1, L.tr("Ghi đè hành vi giữ nút nguồn"),
                 L.tr("Tắt nếu bạn muốn giữ nguyên hành vi gốc của nút nguồn (menu nguồn, đèn pin…). Khi tắt, app tự trả lại giá trị cũ cho nút nguồn."),

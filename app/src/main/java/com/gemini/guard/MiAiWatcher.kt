@@ -3,6 +3,7 @@ package com.gemini.guard
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
+import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Path
 import android.os.Handler
@@ -22,28 +23,71 @@ class MiAiWatcher : AccessibilityService() {
 
     override fun onAccessibilityEvent(e: AccessibilityEvent?) {
         if (e == null) return
-        if (e.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
-        val pkg = e.packageName?.toString() ?: return
+        when (e.eventType) {
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                val pkg = e.packageName?.toString()
+                    ?: e.source?.packageName?.toString()
+                    ?: return
+                val cls = e.className?.toString()
+                    ?: e.source?.className?.toString()
+                    ?: ""
+                handleWindow(pkg, cls, "state")
+            }
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
+                // Mot so lop phu (voice overlay) khong phat TYPE_WINDOW_STATE_CHANGED.
+                // Doc cua so dang active de khong bo lo.
+                val w = try { windows.firstOrNull { it.isActive } } catch (_: Throwable) { null } ?: return
+                val root = try { w.root } catch (_: Throwable) { null } ?: return
+                val pkg = root.packageName?.toString() ?: return
+                if (pkg !in watchedPackages()) return
+                val cls = root.className?.toString() ?: ""
+                val key = "$pkg|$cls"
+                val now = SystemClock.elapsedRealtime()
+                if (key == lastWinKey && now - lastWinAt < 1200) return
+                lastWinKey = key
+                lastWinAt = now
+                wlog("windows: $pkg $cls")
+                handleWindow(pkg, cls, "windows")
+            }
+        }
+    }
+
+    private var lastWinKey = ""
+    private var lastWinAt = 0L
+
+    /** Cac goi co the chua cua so giong noi XiaoAI/YOYO (ke ca proxy). */
+    private fun watchedPackages(): List<String> {
+        val pr = Restorer.prefs(this)
+        return (Filters.split(pr.getString("mi_pkgs", defaultPkgs()) ?: defaultPkgs()) +
+            Restorer.targetPkg(this) + GOOGLE_PKG + PROXY_PKGS)
+            .filter { it.isNotBlank() }.distinct()
+    }
+
+    private fun handleWindow(pkg: String, cls: String, source: String) {
         if (pkg == packageName) return
         // Luon nghe ca Google: chon ChatGPT lam target van can hieu ung khi giu nut nguon mo Gemini.
         // Truoc day Google bi loc khoi packageNames nen am thanh / rung bi mat trong truong hop nay.
-        if (pkg == Restorer.GOOGLE_PKG || pkg == Restorer.targetPkg(this)) { onAssistantWindow(e, pkg); return }
+        if (pkg == Restorer.GOOGLE_PKG || pkg == Restorer.targetPkg(this)) {
+            onAssistantWindow(pkg, cls)
+            return
+        }
         val pr = Restorer.prefs(this)
         if (!pr.getBoolean("mi_on", false)) return
 
-        remember(pkg, "$pkg  ${e.className}")
+        remember(pkg, "$pkg  $cls")
 
-        val targets = Filters.split(pr.getString("mi_pkgs", defaultPkgs()) ?: defaultPkgs())
+        val targets = (Filters.split(pr.getString("mi_pkgs", defaultPkgs()) ?: defaultPkgs()) + PROXY_PKGS).distinct()
         if (pkg !in targets) return
 
-        val cls = e.className?.toString() ?: ""
-        wlog("Mi AI: $cls")
+        wlog("Mi AI: $cls" + if (source == "windows") " (windows)" else "")
 
-        // Loc theo ten cua so: chi lop phu giong noi moi goi Gemini, mo app / dich man hinh thi bo qua
+        // Loc theo ten cua so: chi lop phu giong noi moi goi Gemini, mo app / dich man hinh thi bo qua.
+        // Them nhan dang mem: mot so ban ROM dat ten lop khac FrameLayout nhung van la lop phu giong noi.
         val exc = pr.getString("mi_exc", defaultExc()) ?: ""
         val inc = pr.getString("mi_inc", defaultInc()) ?: ""
+        val isVoice = inc.isBlank() || Filters.matches(inc, cls) || looksLikeVoice(cls)
         if (exc.isNotBlank() && Filters.matches(exc, cls)) { wlog("→ bỏ qua (thuộc danh sách bỏ qua)"); return }
-        if (inc.isNotBlank() && !Filters.matches(inc, cls)) { wlog("→ bỏ qua (không thuộc danh sách giọng nói)"); return }
+        if (!isVoice) { wlog("→ bỏ qua (không thuộc danh sách giọng nói)"); return }
 
         val now = SystemClock.elapsedRealtime()
         if (now - lastFire < 4000) { wlog("→ chống lặp (<4s)"); return }   // chong lap
@@ -71,11 +115,25 @@ class MiAiWatcher : AccessibilityService() {
                     handler.postDelayed({ if (miWindowBounds(pkg) != null) tapOutside(pkg, 1, null) }, 600)
                 }
             }, tapWait)
-            // Du phong neu he thong khong bao ket qua cham
-            handler.postDelayed(fire, tapWait + 400 + delay)
+            // Du phong neu he thong khong bao ket qua cham (giam tu 400ms xuong 180ms)
+            handler.postDelayed(fire, tapWait + 180 + delay)
         } else {
             handler.postDelayed({ callGemini(pkg) }, delay)
         }
+    }
+
+    /** Nhan dang mem cac lop cua so giong noi khac ten FrameLayout. */
+    private fun looksLikeVoice(cls: String): Boolean {
+        if (cls.isBlank()) return false
+        // Chi xet ten lop ngan: ten day du luon chua "com.xiaomi.voiceassistant" nen
+        // neu so khop ca chuoi se khop moi man hinh cai dat cua XiaoAI.
+        val simple = cls.substringAfterLast('.')
+        return simple.contains("FrameLayout", true) ||
+            simple.contains("VoiceOverlay", true) ||
+            simple.contains("VoiceAssist", true) ||
+            simple.contains("AssistView", true) ||
+            simple.contains("Overlay", true) ||
+            simple.contains("Float", true)
     }
 
 
@@ -86,11 +144,48 @@ class MiAiWatcher : AccessibilityService() {
         if (Restorer.prefs(this).getBoolean("enabled", true)) Restorer.ensure(this)
         val err = Restorer.callTarget(this)
         wlog(if (err == null) "→ gọi xong: OK" else "→ gọi LỖI: $err")
-        if (err == null) GeminiSound.play(this)
-        else Toast.makeText(this, L.fmt("Không gọi được %s: %s", Restorer.targetLabel(this), err), Toast.LENGTH_LONG).show()
+        if (err == null) {
+            GeminiSound.play(this)
+            verifyGoogleVisible()
+        } else {
+            // Cho phep lan goi tiep theo thu lai ngay, va thu lai 1 lan sau 350ms.
+            lastFire = 0
+            handler.postDelayed({
+                val retry = Restorer.callTarget(this)
+                if (retry == null) {
+                    wlog("→ thử lại: OK")
+                    GeminiSound.play(this)
+                }
+            }, 350)
+            Toast.makeText(this, L.fmt("Không gọi được %s: %s", Restorer.targetLabel(this), err), Toast.LENGTH_LONG).show()
+        }
     }
 
-    /** Khung cua so cua package dang hien tren man hinh (null = khong con). Can canRetrieveWindowContent. */
+    /**
+     * Sau khi goi hidden API, kiem tra xem Google co thuc su hien len khong.
+     * Nhieu ROM chan background activity start: API tra ve OK nhung cua so Google
+     * khong duoc dua len foreground. Khi do gui ACTION_ASSIST de he thong mo truc tiep.
+     */
+    private fun verifyGoogleVisible() {
+        if (Restorer.targetPkg(this) != Restorer.GOOGLE_PKG) return
+        handler.postDelayed({
+            val visible = try {
+                windows.any { w ->
+                    w.isFocused && w.root?.packageName?.toString() == Restorer.GOOGLE_PKG
+                }
+            } catch (_: Throwable) { false }
+            if (!visible) {
+                wlog("→ Google chưa hiện, gửi ACTION_ASSIST")
+                try {
+                    startActivity(Intent(Intent.ACTION_ASSIST).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (e: Throwable) {
+                    wlog("→ ACTION_ASSIST lỗi: ${e.javaClass.simpleName}")
+                }
+            }
+        }, 900)
+    }
+
+
     private fun miWindowBounds(pkg: String): android.graphics.Rect? {
         return try {
             var best: android.graphics.Rect? = null
@@ -106,10 +201,9 @@ class MiAiWatcher : AccessibilityService() {
     }
 
     /** Cua so tro ly muc tieu hoac Google vua hien -> phat am thanh (ca khi giu nut nguon / goi giong noi). */
-    private fun onAssistantWindow(e: AccessibilityEvent, pkg: String) {
+    private fun onAssistantWindow(pkg: String, cls: String) {
         val pr = Restorer.prefs(this)
         val now = SystemClock.elapsedRealtime()
-        val cls = e.className?.toString() ?: ""
         val line = "$pkg  $cls"
         if (line != lastAssistantWin) {
             lastAssistantWin = line
@@ -199,9 +293,9 @@ class MiAiWatcher : AccessibilityService() {
             // Luon gom Google + app dich + goi dich man hinh: Google de nhan hieu ung am thanh
             // ke ca khi target la ChatGPT; goi dich de clickCardByText thay cua so app dich.
             val tr = (pr.getString("tr_pkg", BarOverlay.defaultTrPkg()) ?: "").trim()
-            val pkgs = (pk + Restorer.targetPkg(this) + Restorer.GOOGLE_PKG + tr)
+            val pkgs = (pk + Restorer.targetPkg(this) + Restorer.GOOGLE_PKG + tr + PROXY_PKGS)
                 .filter { it.isNotBlank() }.distinct().toTypedArray()
-            val types = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            val types = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOWS_CHANGED
             var flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
             if (notImportant) flags = flags or AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
             val key = "$types|$flags|${pkgs.joinToString(",")}"
@@ -276,6 +370,9 @@ class MiAiWatcher : AccessibilityService() {
         const val DEFAULT_INC = "android.widget.FrameLayout"
         const val DEFAULT_EXC = "com.xiaomi.voiceassistant.mainui.navigator.MainNavigatorActivity"
         const val GOOGLE_PKG = "com.google.android.googlequicksearchbox"
+
+        /** Goi proxy/phu tro cua XiaoAI: co the chua cua so giong noi tren mot so ban ROM. */
+        val PROXY_PKGS = listOf("com.miui.voicetrigger", "com.miui.voiceassistProxy")
 
         /** Goi y theo hang may; nguoi dung van co the sua trong phan cai dat. */
         fun defaultPkgs(): String =

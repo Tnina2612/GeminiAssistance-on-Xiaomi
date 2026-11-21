@@ -132,6 +132,7 @@ class GuardService : Service() {
         bar.refresh()
         applyWatchMode()
         GeminiSound.warm(this)
+        GoogleWarmup.start(this)
 
         val f = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
@@ -155,6 +156,8 @@ class GuardService : Service() {
         bar.refresh()
         applyWatchMode()
         startBankPoll()
+        if (Restorer.prefs(this).getBoolean("warm_google", true)) GoogleWarmup.start(this)
+        else GoogleWarmup.stop(this)
         try {
             getSystemService(NotificationManager::class.java).notify(1, buildNotification())
         } catch (_: Throwable) {}
@@ -229,6 +232,7 @@ class GuardService : Service() {
     override fun onDestroy() {
         bar.hide()
         unregister()
+        GoogleWarmup.stop(this)
         try { unregisterReceiver(screenReceiver) } catch (_: Throwable) {}
         handler.removeCallbacks(bankPoll)
         handler.removeCallbacksAndMessages(null)
