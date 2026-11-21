@@ -3,6 +3,7 @@
     <string name="mi_ai_watcher_label">Gemini Guard – Mi AI watcher</string>
     <string name="mi_ai_watcher_desc">Watches which app windows appear (Mi AI and Google) so it can call Gemini, closes Mi AI with Back or a tap, and can tap the Screen translation card in the Xiaomi translator app. It does not collect or send any data.</string>
     <string name="tile_label">Gemini Guard Accessibility</string>
+    <string name="assist_tile_label">Gọi trợ lý</string>
     <string name="shortcut_toggle_short">Toggle Accessibility</string>
     <string name="shortcut_toggle_long">Toggle Gemini Guard Accessibility</string>
 </resources>

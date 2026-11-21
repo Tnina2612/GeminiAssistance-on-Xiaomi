@@ -33,8 +33,7 @@ class MiAiWatcher : AccessibilityService() {
 
         remember(pkg, "$pkg  ${e.className}")
 
-        val targets = (pr.getString("mi_pkgs", defaultPkgs()) ?: defaultPkgs())
-            .split(",", ";", " ", "\n").map { it.trim() }.filter { it.isNotEmpty() }
+        val targets = Filters.split(pr.getString("mi_pkgs", defaultPkgs()) ?: defaultPkgs())
         if (pkg !in targets) return
 
         val cls = e.className?.toString() ?: ""
@@ -43,8 +42,8 @@ class MiAiWatcher : AccessibilityService() {
         // Loc theo ten cua so: chi lop phu giong noi moi goi Gemini, mo app / dich man hinh thi bo qua
         val exc = pr.getString("mi_exc", defaultExc()) ?: ""
         val inc = pr.getString("mi_inc", defaultInc()) ?: ""
-        if (exc.isNotBlank() && matches(exc, cls)) { wlog("→ bỏ qua (thuộc danh sách bỏ qua)"); return }
-        if (inc.isNotBlank() && !matches(inc, cls)) { wlog("→ bỏ qua (không thuộc danh sách giọng nói)"); return }
+        if (exc.isNotBlank() && Filters.matches(exc, cls)) { wlog("→ bỏ qua (thuộc danh sách bỏ qua)"); return }
+        if (inc.isNotBlank() && !Filters.matches(inc, cls)) { wlog("→ bỏ qua (không thuộc danh sách giọng nói)"); return }
 
         val now = SystemClock.elapsedRealtime()
         if (now - lastFire < 4000) { wlog("→ chống lặp (<4s)"); return }   // chong lap
@@ -141,10 +140,6 @@ class MiAiWatcher : AccessibilityService() {
         } catch (_: Throwable) {}
     }
 
-    private fun matches(list: String, cls: String): Boolean =
-        list.split(",", "\n", ";").map { it.trim() }.filter { it.isNotEmpty() }
-            .any { cls.contains(it, ignoreCase = true) }
-
     private var lastSeenTop = ""
     private var lastAssistantWin = ""
 
@@ -200,8 +195,7 @@ class MiAiWatcher : AccessibilityService() {
     private fun applyInfo(notImportant: Boolean = false) {
         try {
             val pr = Restorer.prefs(this)
-            val pk = (pr.getString("mi_pkgs", defaultPkgs()) ?: defaultPkgs())
-                .split(",", ";", " ", "\n").map { it.trim() }.filter { it.isNotEmpty() }
+            val pk = Filters.split(pr.getString("mi_pkgs", defaultPkgs()) ?: defaultPkgs())
             // Luon gom Google + app dich + goi dich man hinh: Google de nhan hieu ung am thanh
             // ke ca khi target la ChatGPT; goi dich de clickCardByText thay cua so app dich.
             val tr = (pr.getString("tr_pkg", BarOverlay.defaultTrPkg()) ?: "").trim()

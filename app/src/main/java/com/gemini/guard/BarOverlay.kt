@@ -40,11 +40,15 @@ class BarOverlay(private val ctx: Context) {
         val maxY = (dm.density * MAX_Y_DP).toInt()
         val alpha = p.getInt("bar_a", 30) * 255 / 100
 
+        var flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        // Do dam 0% = vo hinh: khong cho nhan cham de khong chan thao tac day man hinh.
+        if (alpha == 0) flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+
         val lp = WindowManager.LayoutParams(
             w, h, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            flags,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
@@ -222,7 +226,7 @@ class BarOverlay(private val ctx: Context) {
         /** Hanh dong cua cu chi `bar_dt` (cham dup) / `bar_lp` (giu). Mac dinh giu nguyen hanh vi cu. */
         fun currentAction(pr: SharedPreferences, key: String): String {
             pr.getString(key, null)?.let { v -> if (ACTIONS.any { it.first == v }) return v }
-            return if (key == "bar_dt") (if (pr.getBoolean("dt_translate", false)) "translate" else "gemini") else "micts"
+            return if (key == "bar_dt") "gemini" else "micts"
         }
 
         const val TR_PKG = "com.xiaomi.aiasst.vision"

@@ -1,5 +1,6 @@
 package com.gemini.guard
 
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.os.SystemClock
@@ -8,7 +9,8 @@ import org.lsposed.hiddenapibypass.HiddenApiBypass
 /** Goi phien tro ly that (Gemini overlay) qua VoiceInteractionManagerService. null = thanh cong. */
 object GeminiCall {
     private fun invoke(): Any? {
-        HiddenApiBypass.addHiddenApiExemptions("")
+        // Gioi han hidden API chi co tu Android 9 (API 28). Android 8.0/8.1 khong can bypass.
+        if (Build.VERSION.SDK_INT >= 28) HiddenApiBypass.addHiddenApiExemptions("")
         val sm = Class.forName("android.os.ServiceManager")
         val binder = sm.getMethod("getService", String::class.java).invoke(null, "voiceinteraction") as IBinder
         val stub = Class.forName("com.android.internal.app.IVoiceInteractionManagerService\$Stub")

@@ -23,7 +23,9 @@ class BootReceiver : BroadcastReceiver() {
             }
         }
 
-        if (watching || pr.getBoolean("bar", false)) {
+        if (watching) Watchdog.schedule(c) else Watchdog.cancel(c)
+
+        if (watching || pr.getBoolean("bar", false) || pr.getBoolean("bank_guard", false)) {
             try { c.startForegroundService(Intent(c, GuardService::class.java)) } catch (_: Exception) {}
         }
     }

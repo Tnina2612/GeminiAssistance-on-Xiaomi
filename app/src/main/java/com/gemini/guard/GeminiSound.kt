@@ -29,9 +29,14 @@ object GeminiSound {
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build()
             )
-            val afd = app.resources.openRawResourceFd(R.raw.gemini_sound)
-            mp.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-            afd.close()
+            val custom = Restorer.prefs(app).getString("snd_file", "")?.trim().orEmpty()
+            if (custom.isNotEmpty() && java.io.File(custom).isFile) {
+                mp.setDataSource(custom)
+            } else {
+                val afd = app.resources.openRawResourceFd(R.raw.gemini_sound)
+                mp.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                afd.close()
+            }
             mp.setOnPreparedListener {
                 val enh = try { LoudnessEnhancer(it.audioSessionId) } catch (_: Throwable) { null }
                 onReady(Ready(it, enh))

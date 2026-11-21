@@ -15,6 +15,8 @@ object Restorer {
     const val GOOGLE_PKG = "com.google.android.googlequicksearchbox"
     const val CHATGPT_PKG = "com.openai.chatgpt"
     const val CHATGPT_ASSIST_ACTIVITY = "com.openai.voice.assistant.AssistantActivity"
+    /** Gia tri dac biet cua target_pkg: dung ten goi trong target_custom. */
+    const val TARGET_CUSTOM = "custom"
     private val SECURE_KEYS = listOf("assistant", "voice_interaction_service")
 
     /**
@@ -24,7 +26,13 @@ object Restorer {
      * nen chi mo duoc bang cach mo thang app do (nhu mo mot app binh thuong), khong the thay
      * the duoc hanh vi giu nut nguon o muc he thong.
      */
-    fun targetPkg(c: Context): String = prefs(c).getString("target_pkg", GOOGLE_PKG) ?: GOOGLE_PKG
+    fun targetPkg(c: Context): String {
+        val v = prefs(c).getString("target_pkg", GOOGLE_PKG) ?: GOOGLE_PKG
+        if (v == TARGET_CUSTOM) {
+            return prefs(c).getString("target_custom", "")?.trim().orEmpty().ifEmpty { GOOGLE_PKG }
+        }
+        return v
+    }
 
     fun targetLabel(c: Context): String = when (targetPkg(c)) {
         GOOGLE_PKG -> "Google"
@@ -66,7 +74,7 @@ object Restorer {
      * -> mo thang app Gemini. Ghi lai loi tung buoc de chan doan khi Android moi doi API an.
      */
     private fun callGoogle(c: Context): String? {
-        val hiddenErr = GeminiCall.show()
+        val hiddenErr = GeminiCall.showChecked()
         if (hiddenErr == null) {
             noteAssist(c, "phiên trợ lý hệ thống: OK")
             return null
@@ -225,22 +233,40 @@ object Restorer {
      *  Chi Xiaomi/HyperOS moi co khoa power_button_long_press; may khac tra ve false. */
     fun enforcePowerKey(c: Context) = DeviceProfile.isXiaomi && prefs(c).getBoolean("power_key", true)
 
+    /** Chinh sach tung setting: nguoi dung co the tat rieng tung muc. */
+    fun keepAssistant(c: Context) = prefs(c).getBoolean("keep_assistant", true)
+    fun keepVoice(c: Context) = prefs(c).getBoolean("keep_voice", true)
+
     fun hasPermission(c: Context) =
         c.checkSelfPermission("android.permission.WRITE_SECURE_SETTINGS") == PackageManager.PERMISSION_GRANTED
 
-    /** Ghi lại giá trị đúng nếu bị đổi. Trả về mô tả những gì đã sửa. */
+    /**
+     * Ghi lại giá trị đúng nếu bị đổi. Trả về mô tả những gì đã sửa.
+     * Sau mỗi lần ghi đều đọc lại để xác nhận; nếu hệ thống đổi ngược lại thì ghi rõ trong log
+     * và trong "verify_last" để người dùng biết app không im lặng thất bại.
+     */
     fun ensure(c: Context): List<String> {
         val changes = mutableListOf<String>()
         if (!hasPermission(c)) return changes
         if (cycling) return changes   // dang tat -> bat lai Google, dung can thiep
         val r = c.contentResolver
+        val want = assistComponent(c)
+        val policy = mapOf(
+            "assistant" to keepAssistant(c),
+            "voice_interaction_service" to keepVoice(c)
+        )
         try {
-            val want = assistComponent(c)
             for (k in SECURE_KEYS) {
+                if (policy[k] != true) continue
                 val cur = Settings.Secure.getString(r, k)
                 if (cur != want) {
                     Settings.Secure.putString(r, k, want)
-                    changes += "$k: [${cur ?: "null"}] -> ${effectiveLabel(c)}"
+                    val back = Settings.Secure.getString(r, k)
+                    if (back == want) {
+                        changes += "$k: [${cur ?: "null"}] -> ${effectiveLabel(c)} (đã xác nhận)"
+                    } else {
+                        changes += "$k: [${cur ?: "null"}] -> ${effectiveLabel(c)} NHƯNG hệ thống đổi lại [${back ?: "null"}]"
+                    }
                 }
             }
             if (enforcePowerKey(c)) {
@@ -248,11 +274,16 @@ object Restorer {
                 if (p != POWER_VALUE) {
                     rememberPower(c, p)
                     Settings.Global.putInt(r, POWER_KEY, POWER_VALUE)
-                    changes += "$POWER_KEY: [$p] -> $POWER_VALUE"
+                    val back = Settings.Global.getInt(r, POWER_KEY, -1)
+                    changes += if (back == POWER_VALUE)
+                        "$POWER_KEY: [$p] -> $POWER_VALUE (đã xác nhận)"
+                    else "$POWER_KEY: [$p] -> $POWER_VALUE NHƯNG hệ thống giữ [$back]"
                 }
             }
-            // Khi nguoi dung tat Tro nang bang phim tat (acc_tile_off), khong tu bat lai o day
-            if (prefs(c).getBoolean("mi_on", false) && !accessibilityOn(c) && !prefs(c).getBoolean("acc_tile_off", false)) {
+            // Khi nguoi dung tat Tro nang bang phim tat (acc_tile_off) hoac app ngan hang dang
+            // tam tat (bank_paused), khong tu bat lai o day
+            if (prefs(c).getBoolean("mi_on", false) && !accessibilityOn(c) &&
+                !prefs(c).getBoolean("acc_tile_off", false) && !prefs(c).getBoolean("bank_paused", false)) {
                 val cn = ComponentName(c, MiAiWatcher::class.java)
                 val list = enabledList(r).filter { ComponentName.unflattenFromString(it) != cn }
                 Settings.Secure.putString(r, ACC_KEY, (list + cn.flattenToString()).joinToString(":"))
@@ -262,7 +293,12 @@ object Restorer {
         } catch (e: SecurityException) {
             changes += L.tr("Lỗi quyền: ") + e.message
         }
-        if (changes.isNotEmpty()) log(c, changes.joinToString("; "))
+        if (changes.isNotEmpty()) {
+            log(c, changes.joinToString("; "))
+            val t = SimpleDateFormat("dd/MM HH:mm:ss", Locale.US).format(Date())
+            prefs(c).edit().putString("verify_last", "$t  ${changes.joinToString("; ")}").apply()
+            prefs(c).edit().putLong("verify_at", System.currentTimeMillis()).apply()
+        }
         return changes
     }
 
@@ -287,8 +323,8 @@ object Restorer {
             runCycle(c)
         } catch (e: Throwable) {
             try {
-                Settings.Secure.putString(r, "voice_interaction_service", oldService)
-                Settings.Secure.putString(r, "assistant", oldAssistant)
+                if (keepVoice(c)) Settings.Secure.putString(r, "voice_interaction_service", oldService)
+                if (keepAssistant(c)) Settings.Secure.putString(r, "assistant", oldAssistant)
                 if (enforcePowerKey(c)) Settings.Global.putString(r, POWER_KEY, oldPower)
             } catch (_: Throwable) {}
             L.fmt("Không hoàn tất: %s: %s. Đã trả về giá trị cũ.", e.javaClass.simpleName, e.message)
@@ -312,21 +348,29 @@ object Restorer {
 
         val offMs = prefs(c).getInt("cycle_off_ms", 1500).toLong()
         val setPower = enforcePowerKey(c)
-        Settings.Secure.putString(r, "voice_interaction_service", "")
-        Settings.Secure.putString(r, "assistant", "")
+        val keepA = keepAssistant(c)
+        val keepV = keepVoice(c)
+        if (!keepA && !keepV && !setPower) return L.tr("Bạn đã tắt cả ba mục canh. Không có gì để tắt → bật lại.")
+
+        if (keepV) Settings.Secure.putString(r, "voice_interaction_service", "")
+        if (keepA) Settings.Secure.putString(r, "assistant", "")
         Thread.sleep(offMs)
 
-        Settings.Secure.putString(r, "voice_interaction_service", want)
-        Settings.Secure.putString(r, "assistant", want)
+        if (keepV) Settings.Secure.putString(r, "voice_interaction_service", want)
+        if (keepA) Settings.Secure.putString(r, "assistant", want)
         if (setPower) {
             rememberPower(c, Settings.Global.getInt(r, POWER_KEY, -1))
             Settings.Global.putString(r, POWER_KEY, POWER_VALUE.toString())
         }
         Thread.sleep(1000)
 
-        val ok = Settings.Secure.getString(r, "assistant") == want &&
-            Settings.Secure.getString(r, "voice_interaction_service") == want &&
+        val ok = (!keepA || Settings.Secure.getString(r, "assistant") == want) &&
+            (!keepV || Settings.Secure.getString(r, "voice_interaction_service") == want) &&
             (!setPower || Settings.Global.getString(r, POWER_KEY) == POWER_VALUE.toString())
+        val t = SimpleDateFormat("dd/MM HH:mm:ss", Locale.US).format(Date())
+        prefs(c).edit()
+            .putString("verify_last", "$t  " + if (ok) L.tr("tắt→bật: đọc lại đúng") else L.tr("tắt→bật: hệ thống chưa giữ đúng"))
+            .apply()
         return if (ok) L.fmt("Đã tắt → bật lại %s; đọc lại đúng các giá trị. Hãy thử giữ nút nguồn.", label)
         else L.tr("Đã chạy nhưng HyperOS chưa giữ đúng giá trị (hệ thống có thể đã tự đổi lại). Thử bấm lại.")
     }
@@ -349,6 +393,9 @@ object Restorer {
         prefs(c).edit().putString("log", lines.joinToString("\n")).apply()
     }
 
+    /** Ghi mot dong vao nhat ky tu sua (dung cho cac module ngoai). */
+    fun note(c: Context, msg: String) = log(c, msg)
+
     fun status(c: Context): String {
         val r = c.contentResolver
         val sb = StringBuilder()
@@ -363,7 +410,11 @@ object Restorer {
         sb.append("\nNhật ký gọi Mi AI (mới nhất trước):\n").append(if (wl.isBlank()) "(chưa có)" else wl).append("\n")
         for (k in SECURE_KEYS) {
             val v = Settings.Secure.getString(r, k)
-            sb.append(k).append(": ").append(if (v == assistComponent(c)) effectiveLabel(c) + " OK" else "[" + (v ?: L.tr("trống")) + "] " + L.tr("SAI")).append("\n")
+            val kept = if (k == "assistant") keepAssistant(c) else keepVoice(c)
+            sb.append(k).append(": ")
+                .append(if (v == assistComponent(c)) effectiveLabel(c) + " OK" else "[" + (v ?: L.tr("trống")) + "] " + L.tr("SAI"))
+                .append(if (kept) "" else L.tr(" (đang tắt canh)"))
+                .append("\n")
         }
         if (DeviceProfile.isXiaomi) {
             sb.append(POWER_KEY).append(": ").append(Settings.Global.getInt(r, POWER_KEY, -1))
@@ -376,6 +427,8 @@ object Restorer {
         }
         sb.append(L.tr("Trợ năng MiAiWatcher: ")).append(if (accessibilityOn(c)) L.tr("BẬT") else L.tr("TẮT")).append(if (prefs(c).getBoolean("acc_tile_off", false)) L.tr(" (tắt bằng phím tắt Control Center)") else "").append("\n")
         sb.append(L.tr("Tắt→bật Google gần nhất: ")).append(prefs(c).getString("cycle_last", "")?.ifBlank { L.tr("(chưa chạy)") } ?: L.tr("(chưa chạy)")).append("\n")
+        val vl = prefs(c).getString("verify_last", "") ?: ""
+        if (vl.isNotBlank()) sb.append(L.tr("Lần tự sửa gần nhất: ")).append(vl).append("\n")
         sb.append(L.tr("\nNhật ký tự sửa (mới nhất trước):\n"))
         sb.append(prefs(c).getString("log", "")?.ifBlank { L.tr("(chưa có)") } ?: L.tr("(chưa có)"))
         return sb.toString()

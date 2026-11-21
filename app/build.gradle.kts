@@ -19,6 +19,21 @@ fun signingValue(key: String, env: String, fallback: String): String =
         ?: System.getenv(env)?.takeIf { it.isNotBlank() }
         ?: fallback
 
+// Version nam trong version.properties (on dinh, build lai ra cung so).
+// Co the ghi de khi build: -PversionCode=... -PversionName=...
+val versionProps = Properties().apply {
+    val f = rootProject.file("version.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
+fun versionValue(key: String, fallback: String): String =
+    (project.findProperty(key) as String?)?.takeIf { it.isNotBlank() }
+        ?: versionProps.getProperty(key)?.takeIf { it.isNotBlank() }
+        ?: fallback
+
+val appVersionCode = versionValue("versionCode", "30000001").toInt()
+val appVersionName = versionValue("versionName", "4.1")
+
 android {
     namespace = "com.gemini.guard"
     compileSdk = 34
@@ -26,9 +41,8 @@ android {
         applicationId = "com.gemini.guard"
         minSdk = 26
         targetSdk = 34
-        // versionCode = so phut ke tu 1970 -> luon tang theo thoi gian build, dung o repo nao cung cai de len duoc
-        versionCode = (System.currentTimeMillis() / 60000L).toInt()
-        versionName = "4.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
     }
     signingConfigs {
         create("fixed") {
@@ -40,14 +54,31 @@ android {
     }
     buildTypes {
         getByName("debug") { signingConfig = signingConfigs.getByName("fixed") }
+        getByName("release") {
+            // Cung chu ky voi ban debug de cai de len ban dang dung (khong mat quyen ADB).
+            signingConfig = signingConfigs.getByName("fixed")
+            isMinifyEnabled = false      // hidden API + reflection: bat minify de vo app
+            isShrinkResources = false
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    lint {
+        // CI chay lint de phat hien van de, nhung khong chan phat hanh APK.
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
 }
 
 dependencies {
     implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
+    testImplementation("junit:junit:4.13.2")
+}
+
+// Tien cho CI / script: in ra version dang dung.
+tasks.register("printVersionName") {
+    doLast { println(appVersionName) }
 }

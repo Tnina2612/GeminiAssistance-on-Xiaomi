@@ -15,7 +15,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      # Unit test cho bo loc cua so va lint tinh. Lint khong chan build (abortOnError=false).
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Lint
+        run: ./gradlew lintDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: |
+            app/build/reports/tests/**
+            app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,8 +63,12 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Read version
+        id: version
+        run: echo "name=$(grep '^versionName=' version.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+
+      - name: Build debug + release APK
+        run: ./gradlew assembleDebug assembleRelease --no-daemon
         env:
           # Neu chua dat secrets thi build dung mat khau mac dinh (xem app/build.gradle.kts).
           # Dat secrets de ky bang keystore rieng; bo trong van cai de len ban cu duoc.
@@ -41,16 +77,20 @@ jobs:
           GUARD_KEY_PASSWORD: ${{ secrets.GUARD_KEY_PASSWORD }}
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk GeminiGuard-v2.0.apk
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk "GeminiGuard-v${{ steps.version.outputs.name }}-debug.apk"
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk "GeminiGuard-v${{ steps.version.outputs.name }}-release.apk"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
-          name: GeminiGuard-apk
-          path: GeminiGuard-v2.0.apk
+          name: GeminiGuard-v${{ steps.version.outputs.name }}
+          path: GeminiGuard-v${{ steps.version.outputs.name }}-*.apk
           if-no-files-found: error
 
       - name: Publish release (khi push tag v*)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: GeminiGuard-v2.0.apk
+          files: GeminiGuard-v${{ steps.version.outputs.name }}-*.apk
