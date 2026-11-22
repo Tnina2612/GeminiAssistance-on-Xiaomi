@@ -36,6 +36,10 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- Permission cho app tich hop gui lenh dieu khien (van phai kem token). -->
+    <permission android:name="com.gemini.guard.permission.SEND_COMMAND"
+        android:protectionLevel="normal" />
+
     <application android:name=".GuardApp"
         android:label="Gemini Guard"
         android:icon="@mipmap/ic_launcher"
@@ -83,7 +87,8 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
-        <receiver android:name=".CommandReceiver" android:exported="true">
+        <receiver android:name=".CommandReceiver" android:exported="true"
+            android:permission="com.gemini.guard.permission.SEND_COMMAND">
             <intent-filter>
                 <action android:name="com.gemini.guard.ACTION_ASSIST" />
                 <action android:name="com.gemini.guard.ACTION_BAR_ON" />
@@ -94,7 +99,7 @@
         <activity android:name=".AccToggleActivity" android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="" />
-        <receiver android:name=".BootReceiver" android:exported="true">
+        <receiver android:name=".BootReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />

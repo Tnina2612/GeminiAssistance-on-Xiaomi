@@ -23,6 +23,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
@@ -54,6 +56,10 @@ class MainActivity : Activity() {
     private lateinit var bankPkgs: EditText
     private lateinit var warnCard: LinearLayout
     private lateinit var stateBox: LinearLayout
+
+    private val tabContents = mutableListOf<View>()
+    private val tabButtons = mutableListOf<TextView>()
+    private var selectedTab = 0
 
     private val REQ_EXPORT = 10
     private val REQ_IMPORT = 11
@@ -194,31 +200,28 @@ class MainActivity : Activity() {
         return s
     }
 
-    /** Chon ngon ngu giao dien: tu dong / English / Tieng Viet. */
-    private fun langRow(p: LinearLayout) {
+    /** Nhan hien thi tren nut ngon ngu o header. */
+    private fun langTag(): String = when (prefs().getString("lang", "auto")) {
+        "vi" -> "VI"
+        "en" -> "EN"
+        else -> "AUTO"
+    }
+
+    /** Hop thoai chon ngon ngu giao dien: tu dong / English / Tieng Viet. */
+    private fun showLangDialog() {
         val opts = listOf("auto" to "Auto / Tự động", "en" to "English", "vi" to "Tiếng Việt")
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(10), 0, dp(10))
-        }
-        row.addView(label("Language / Ngôn ngữ", 14f, INK), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         val cur = prefs().getString("lang", "auto") ?: "auto"
-        row.addView(label(opts.firstOrNull { it.first == cur }?.second ?: opts[0].second, 14f, ACCENT, true))
-        row.setOnClickListener {
-            val idx = opts.indexOfFirst { it.first == cur }.coerceAtLeast(0)
-            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert)
-                .setTitle("Language / Ngôn ngữ")
-                .setSingleChoiceItems(opts.map { it.second }.toTypedArray(), idx) { d, which ->
-                    prefs().edit().putString("lang", opts[which].first).apply()
-                    L.load(this)
-                    d.dismiss()
-                    recreate()
-                }
-                .setNegativeButton("Cancel / Hủy", null)
-                .show()
-        }
-        p.addView(row)
+        val idx = opts.indexOfFirst { it.first == cur }.coerceAtLeast(0)
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert)
+            .setTitle("Language / Ngôn ngữ")
+            .setSingleChoiceItems(opts.map { it.second }.toTypedArray(), idx) { d, which ->
+                prefs().edit().putString("lang", opts[which].first).apply()
+                L.load(this)
+                d.dismiss()
+                recreate()
+            }
+            .setNegativeButton("Cancel / Hủy", null)
+            .show()
     }
 
     /** Dong chon 1 trong nhieu lua chon (hop thoai), dung chung cho moi noi can "picker". */
@@ -481,29 +484,123 @@ class MainActivity : Activity() {
         window.statusBarColor = BG
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(22), dp(16), dp(36))
-        }
         val ver = try { packageManager.getPackageInfo(packageName, 0).versionName } catch (_: Exception) { "?" }
 
-        // Tiêu đề
-        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val logo = ImageView(this).apply {
-            setImageResource(R.drawable.logo)
+        val outer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(BG)
         }
+        buildHeader(outer, ver)
+        outer.addView(buildTabRow(), LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
+        val host = FrameLayout(this)
+        outer.addView(host, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+        ))
+        addTab(host, assistantTab())
+        addTab(host, barTab())
+        addTab(host, miAiTab())
+        addTab(host, soundTab())
+        addTab(host, toolsTab(ver))
+        selectTab(prefs().getInt("ui_tab", 0))
+        setContentView(outer)
+        pushService()
+    }
+
+    private fun buildHeader(outer: LinearLayout, ver: String) {
+        val head = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(22), dp(16), 0)
+        }
+        val logo = ImageView(this).apply { setImageResource(R.drawable.logo) }
         head.addView(logo, LinearLayout.LayoutParams(dp(42), dp(42)).apply { rightMargin = dp(10) })
-        head.addView(label("Gemini Guard", 26f, INK, true))
+        head.addView(label("Gemini Guard", 24f, INK, true))
         head.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        head.addView(TextView(this).apply {
-            text = L.tr("Hỗ trợ"); textSize = 14f; setTextColor(ACCENT); typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            background = shape(TONAL, 20)
-            setPadding(dp(16), dp(8), dp(16), dp(8))
-            setOnClickListener { showSupport() }
+        head.addView(pill(langTag()) { showLangDialog() },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        head.addView(pill(L.tr("Hỗ trợ")) { showSupport() },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(8) })
+        outer.addView(head)
+        outer.addView(label(L.fmt("Giữ Gemini luôn là trợ lý mặc định · phiên bản %s", ver), 13f, MUTED).apply {
+            setPadding(dp(16), dp(2), dp(16), 0)
         })
-        root.addView(head, lp(0))
-        root.addView(label(L.fmt("Giữ Gemini luôn là trợ lý mặc định · phiên bản %s", ver), 13f, MUTED), lp(2))
+    }
+
+    private fun pill(t: String, onClick: () -> Unit): TextView = TextView(this).apply {
+        text = t
+        textSize = 12f
+        setTextColor(ACCENT)
+        typeface = Typeface.DEFAULT_BOLD
+        gravity = Gravity.CENTER
+        background = shape(TONAL, 20)
+        setPadding(dp(12), dp(7), dp(12), dp(7))
+        setOnClickListener { onClick() }
+    }
+
+    private fun buildTabRow(): View {
+        val labels = listOf("Trợ lý", "Thanh", "Mi AI", "Âm thanh", "Công cụ")
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(16), dp(8), dp(16), dp(6))
+        }
+        for ((i, t) in labels.withIndex()) {
+            val b = TextView(this).apply {
+                text = L.tr(t)
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setPadding(dp(14), dp(8), dp(14), dp(8))
+                setOnClickListener { selectTab(i) }
+            }
+            row.addView(b, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { rightMargin = dp(8) })
+            tabButtons += b
+        }
+        return HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(row)
+        }
+    }
+
+    private fun tabRoot(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(16), dp(14), dp(16), dp(36))
+    }
+
+    private fun addTab(host: FrameLayout, root: LinearLayout) {
+        val sv = ScrollView(this).apply {
+            isFillViewport = true
+            setBackgroundColor(BG)
+            addView(root, ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+            visibility = View.GONE
+        }
+        host.addView(sv, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+        ))
+        tabContents += sv
+    }
+
+    private fun selectTab(index: Int) {
+        if (tabContents.isEmpty()) return
+        selectedTab = index.coerceIn(0, tabContents.size - 1)
+        prefs().edit().putInt("ui_tab", selectedTab).apply()
+        for (i in tabContents.indices) {
+            tabContents[i].visibility = if (i == selectedTab) View.VISIBLE else View.GONE
+            tabButtons.getOrNull(i)?.let { b ->
+                b.background = shape(if (i == selectedTab) ACCENT else TONAL, 18)
+                b.setTextColor(if (i == selectedTab) Color.WHITE else ACCENT)
+            }
+        }
+        refresh()
+    }
+
+    private fun assistantTab(): LinearLayout {
+        val root = tabRoot()
 
         onboarding(root)
 
@@ -588,6 +685,12 @@ class MainActivity : Activity() {
         seek(c1, L.tr("Đợi sau khi máy khởi động xong"), L.tr(" giây"), "cycle_boot_delay_s", 30, 0)
         btn(c1, L.tr("Cho phép tự khởi động (chống bị dừng)"), top = 8) { openAutostart() }
 
+        return root
+    }
+
+    private fun barTab(): LinearLayout {
+        val root = tabRoot()
+
         // 2. Thanh điều hướng AI
         val c2 = card(root, L.tr("Thanh điều hướng AI"),
             L.tr("Thanh nhỏ nổi ở đáy màn hình. Chọn việc cho từng cử chỉ bên dưới."))
@@ -608,6 +711,12 @@ class MainActivity : Activity() {
         seek(c2, L.tr("Chiều cao"), " dp", "bar_h", 60, 20)
         seek(c2, L.tr("Cách đáy (kéo thanh để đổi)"), " dp", "bar_y", BarOverlay.MAX_Y_DP, BarOverlay.MIN_Y_DP)
         seek(c2, L.tr("Độ đậm (0 = vô hình)"), "%", "bar_a", 100, 30)
+
+        return root
+    }
+
+    private fun miAiTab(): LinearLayout {
+        val root = tabRoot()
 
         // 3. Mi AI
         val c3 = card(root, L.tr("Gọi Gemini khi Mi AI bật lên") + L.tr(" (không dùng được ngân hàng và VNeID, muốn dùng phải tắt đi)"),
@@ -681,6 +790,12 @@ class MainActivity : Activity() {
         }
         btn(c3, L.tr("Cho phép cài đặt bị hạn chế (Android 13+)"), top = 8) { openAppSettings() }
 
+        return root
+    }
+
+    private fun soundTab(): LinearLayout {
+        val root = tabRoot()
+
         // 4. Âm thanh
         val c4 = card(root, L.tr("Hiệu ứng âm thanh và rung"),
             L.tr("Phát âm thanh / rung nhẹ khi Gemini hiện lên: giữ nút nguồn, gọi giọng nói (qua Mi AI) hoặc dùng thanh. Cần bật Trợ năng để nhận ra khi giữ nút nguồn."))
@@ -706,7 +821,8 @@ class MainActivity : Activity() {
             btn(c4, L.tr("Dùng âm thanh mặc định"), top = 8) {
                 val old = prefs().getString("snd_file", "") ?: ""
                 prefs().edit().remove("snd_file").apply()
-                try { java.io.File(old).delete() } catch (_: Exception) {}
+                val deleted = try { java.io.File(old).delete() } catch (_: Exception) { false }
+                if (!deleted) android.util.Log.w("GeminiGuard", "Custom sound file was already gone: $old")
                 GeminiSound.release(); GeminiSound.warm(this)
                 Toast.makeText(this, L.tr("Đã dùng lại âm thanh mặc định"), Toast.LENGTH_SHORT).show()
                 recreate()
@@ -716,12 +832,17 @@ class MainActivity : Activity() {
         seek(c4, L.tr("Thời gian rung"), " ms", "vib_ms", 80, 25)
         btn(c4, L.tr("Thử rung"), top = 8) { Haptic.pop(this, force = true) }
 
+        return root
+    }
+
+    private fun toolsTab(ver: String): LinearLayout {
+        val root = tabRoot()
+
         // 5. Công cụ
         val c5 = card(root, L.tr("Công cụ và chẩn đoán"))
         c5.addView(label(L.tr("Phím tắt thủ công: mở Control Center, bấm Chỉnh sửa (biểu tượng bút chì) rồi kéo ô \"Trợ năng Gemini Guard\" vào (nằm trong mục Phím nhanh ứng dụng, có thể phải cuộn xuống). Nếu không thấy ô, nhấn giữ icon app Gemini Guard và chọn \"Bật/tắt Trợ năng\", có thể kéo mục đó ra màn hình chính. Bấm để tắt Trợ năng NGAY TRƯỚC khi mở app ngân hàng / VNeID, chắc hơn tự động vì không phải chờ hỏi định kỳ. Cần đã cấp quyền WRITE_SECURE_SETTINGS."), 12f, MUTED).apply { setPadding(0, dp(8), 0, 0) })
         if (prefs().getBoolean("acc_tile_off", false))
             c5.addView(label(L.tr("Trợ năng đang tắt bằng phím tắt Control Center, hãy bật lại ở phím tắt đó khi cần dùng Mi AI"), 13f, ACCENT).apply { setPadding(0, dp(4), 0, 0) })
-        langRow(c5)
         btn(c5, L.tr("Cài đặt pin / tự khởi động của app"), top = 14) { openAppSettings() }
         btn(c5, L.tr("Sao chép cài đặt liên quan Mi AI / nút nguồn"), top = 8) {
             copy("settings", Restorer.dumpRelated(this), L.tr("Đã sao chép – dán vào chat để gửi cho Claude"))
@@ -755,7 +876,7 @@ class MainActivity : Activity() {
             }
         }
         val apiOn = !prefs().getString("api_token", "").isNullOrBlank()
-        btn(c5, if (apiOn) L.tr("Đổi mã API điều khiển ngoài") else L.tr("Bật API điều khiển ngoài (Tasker)"), top = 8) {
+        btn(c5, if (apiOn) L.tr("Đổi mã API điều khiển ngoài") else L.tr("Bật API điều khiển ngoài (app tích hợp)"), top = 8) {
             val t = CommandReceiver.newToken()
             prefs().edit().putString("api_token", t).apply()
             copy("api_token", t, L.tr("Đã tạo mã API và sao chép – gửi kèm extra token"))
@@ -767,7 +888,7 @@ class MainActivity : Activity() {
             recreate()
         }
         c5.addView(label(
-            L.tr("API ngoài dùng để Tasker/MacroDroid gọi trợ lý hoặc bật/tắt thanh. Cần gửi extra token. Hành động: ") +
+            L.tr("API ngoài dùng cho ứng dụng tích hợp (phải khai báo quyền com.gemini.guard.permission.SEND_COMMAND) gọi trợ lý hoặc bật/tắt thanh. Cần gửi extra token. Hành động: ") +
                 "com.gemini.guard.ACTION_ASSIST, ACTION_BAR_ON, ACTION_BAR_OFF, ACTION_TOGGLE_ACC.",
             12f, MUTED).apply { setPadding(0, dp(6), 0, 0) })
         status = TextView(this).apply {
@@ -778,14 +899,10 @@ class MainActivity : Activity() {
         }
         c5.addView(status, lp(14))
 
-        root.addView(label("Gemini Guard v$ver · by Đỗ Đạt - Yume. System", 12f, MUTED).apply { gravity = android.view.Gravity.CENTER },
-            lp(22))
-
-        setContentView(ScrollView(this).apply {
-            setBackgroundColor(BG)
-            addView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        })
-        pushService()
+        root.addView(label("Gemini Guard v$ver · by Đỗ Đạt - Yume. System", 12f, MUTED).apply {
+            gravity = Gravity.CENTER
+        }, lp(22))
+        return root
     }
 
     override fun onResume() {

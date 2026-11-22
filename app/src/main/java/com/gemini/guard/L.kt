@@ -233,7 +233,7 @@ object L {
         "Mở lại hướng dẫn thiết lập" to "Reopen the setup guide",
         "Xuất cấu hình (JSON)" to "Export settings (JSON)",
         "Nhập cấu hình (JSON)" to "Import settings (JSON)",
-        "Bật API điều khiển ngoài (Tasker)" to "Enable external control API (Tasker)",
+        "Bật API điều khiển ngoài (app tích hợp)" to "Enable external control API (integration apps)",
         "Đổi mã API điều khiển ngoài" to "Change external control API token",
         "Tắt API điều khiển ngoài" to "Disable external control API",
         "Đã tạo mã API và sao chép – gửi kèm extra token" to "API token created and copied – send it as the token extra",
@@ -266,7 +266,7 @@ object L {
         "Giữ tiến trình Google ở trạng thái ấm để cử chỉ/gọi trợ lý hiện nhanh hơn. Có thể tốn thêm một ít pin." to "Keeps the Google process warm so the gesture/assistant appears faster. May use a little extra battery.",
         "Khác (nhập tên gói)" to "Other (enter package name)",
         "Tên gói trợ lý khác (dùng khi chọn Khác)" to "Other assistant package name (used when Other is selected)",
-        "API ngoài dùng để Tasker/MacroDroid gọi trợ lý hoặc bật/tắt thanh. Cần gửi extra token. Hành động: " to "The external API lets Tasker/MacroDroid call the assistant or toggle the bar. You must send the token extra. Actions: ",
+        "API ngoài dùng cho ứng dụng tích hợp (phải khai báo quyền com.gemini.guard.permission.SEND_COMMAND) gọi trợ lý hoặc bật/tắt thanh. Cần gửi extra token. Hành động: " to "The external API is for integration apps (they must declare the com.gemini.guard.permission.SEND_COMMAND permission) to call the assistant or toggle the bar. You must send the token extra. Actions: ",
         "Đã sao chép lệnh ADB" to "ADB command copied",
         "Đã sao chép liên kết" to "Link copied",
         "Đã sao chép" to "Copied",
@@ -286,5 +286,9 @@ object L {
         "Đã tắt Trợ năng vì mở %s" to "Accessibility turned off because %s was opened",
         "Đã bật lại Trợ năng sau khi rời app ngân hàng" to "Accessibility turned back on after leaving the banking app",
         "Đã bật lại Trợ năng sau khi tắt tự tắt cho ngân hàng" to "Accessibility turned back on after disabling the banking auto-off feature",
+        "Trợ lý" to "Assistant",
+        "Thanh" to "Bar",
+        "Âm thanh" to "Sound",
+        "Công cụ" to "Tools",
     )
 }

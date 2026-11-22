@@ -9,9 +9,10 @@
 **[Tiếng Việt](#tiếng-việt) · [English](#english)**
 
 > **Nguồn gốc / Fork notice**
-> Đây là bản fork được phát triển tiếp từ **[minhdat5122010-dev/GeminiGuard](https://github.com/minhdat5122010-dev/GeminiGuard)**.
-> This project is a fork of **[minhdat5122010-dev/GeminiGuard](https://github.com/minhdat5122010-dev/GeminiGuard)**.
-> Repo gốc không có file license; xem [Giấy phép](#giấy-phép) để biết phạm vi áp dụng của MIT trong bản fork này.
+>
+> **Tiếng Việt:** Đây là bản fork được phát triển tiếp từ **[minhdat5122010-dev/GeminiGuard](https://github.com/minhdat5122010-dev/GeminiGuard)**. Repo gốc không có file license; xem [Giấy phép](#giấy-phép) để biết phạm vi áp dụng của MIT trong bản fork này.
+>
+> **English:** This project is a fork of **[minhdat5122010-dev/GeminiGuard](https://github.com/minhdat5122010-dev/GeminiGuard)**. The original repository does not include a license file; see [License](#license) for the scope of the MIT license in this fork.
 
 ---
 
@@ -73,7 +74,7 @@ Gemini Guard giữ **Google/Gemini** làm trợ lý mặc định trên Xiaomi/H
 - Ô **Gọi trợ lý** trong Control Center.
 - Hoặc nhấn giữ icon app → **Bật/tắt Trợ năng**.
 - Chỉ tắt dịch vụ Trợ năng của Gemini Guard, không ảnh hưởng dịch vụ khác.
-- **API điều khiển ngoài** cho Tasker/MacroDroid qua broadcast, bảo vệ bằng token sinh ngẫu nhiên.
+- **API điều khiển ngoài** cho ứng dụng tích hợp qua broadcast; app gửi phải khai báo quyền `com.gemini.guard.permission.SEND_COMMAND` và gửi kèm token sinh ngẫu nhiên.
 
 #### 6. Onboarding, chẩn đoán và sao lưu
 - **Thiết lập lần đầu**: danh sách bước còn thiếu (quyền ADB, overlay, Trợ năng, tự khởi động) kèm nút sửa từng bước.
@@ -93,7 +94,7 @@ Tải APK từ mục **Releases** (khuyến nghị bản `GeminiGuard-v<phiên b
 - Gỡ ứng dụng sẽ làm mất quyền `WRITE_SECURE_SETTINGS`; khi cài lại phải cấp lại bằng ADB.
 
 ```bash
-adb install -r GeminiGuard-v4.1-release.apk
+adb install -r GeminiGuard-v4.3-release.apk
 ```
 
 #### Bước 2 — Cấp quyền ghi cài đặt bảo mật
@@ -188,12 +189,12 @@ Workflow `.github/workflows/build.yml`:
 
 - Chạy **unit test + lint**.
 - Build cả **debug** và **release**.
-- Đặt tên artifact theo `versionName` (ví dụ `GeminiGuard-v4.1`).
-- Khi push tag `v*` (ví dụ `v4.1`), tự tạo GitHub Release kèm APK debug và release.
+- Đặt tên artifact theo `versionName` (ví dụ `GeminiGuard-v4.3`).
+- Khi push tag `v*` (ví dụ `v4.3`), tự tạo GitHub Release kèm APK debug và release.
 
 ```bash
-git tag v4.1
-git push origin v4.1
+git tag v4.3
+git push origin v4.3
 ```
 
 ### Quyền riêng tư
@@ -231,7 +232,7 @@ app/src/main/java/com/gemini/guard/
 ├── GeminiSound.kt       # Hiệu ứng âm thanh
 ├── Diagnostics.kt       # Tổng hợp và chia sẻ thông tin chẩn đoán
 ├── Backup.kt            # Xuất / nhập cấu hình JSON
-├── CommandReceiver.kt   # API broadcast cho Tasker/MacroDroid
+├── CommandReceiver.kt   # API broadcast cho app tích hợp (permission + token)
 ├── BankGuard.kt         # Tự tắt Trợ năng cho app ngân hàng/VNeID
 ├── DeviceProfile.kt     # Nhận diện Xiaomi / Honor / khác
 ├── AccToggle.kt         # Bật/tắt riêng dịch vụ Trợ năng
@@ -306,7 +307,7 @@ Gemini Guard keeps **Google/Gemini** as the default assistant on Xiaomi/HyperOS 
 - **Call assistant** Quick Settings tile.
 - Long-press the app icon → **Toggle Accessibility**.
 - Only toggles Gemini Guard's Accessibility service, not other services.
-- **External control API** for Tasker/MacroDroid via broadcasts, protected by a random token.
+- **External control API** for integration apps via broadcasts; the sender must declare `com.gemini.guard.permission.SEND_COMMAND` and include a random token.
 
 #### 6. Onboarding, diagnostics and backup
 - **First-time setup** checklist with actions for missing permissions (ADB, overlay, Accessibility, autostart).
@@ -326,7 +327,7 @@ Download the APK from **Releases** (recommended: `GeminiGuard-v<version>-release
 - Uninstalling removes `WRITE_SECURE_SETTINGS`; you must grant it again with ADB.
 
 ```bash
-adb install -r GeminiGuard-v4.1-release.apk
+adb install -r GeminiGuard-v4.3-release.apk
 ```
 
 #### Step 2 — Grant secure-settings permission
@@ -421,12 +422,12 @@ Priority: `keystore.properties` → environment variables → defaults.
 
 - Runs **unit tests + lint**.
 - Builds both **debug** and **release** APKs.
-- Names the artifact after `versionName` (e.g. `GeminiGuard-v4.1`).
-- On a `v*` tag (e.g. `v4.1`), creates a GitHub Release with both APKs.
+- Names the artifact after `versionName` (e.g. `GeminiGuard-v4.3`).
+- On a `v*` tag (e.g. `v4.3`), creates a GitHub Release with both APKs.
 
 ```bash
-git tag v4.1
-git push origin v4.1
+git tag v4.3
+git push origin v4.3
 ```
 
 ### Privacy
@@ -464,7 +465,7 @@ app/src/main/java/com/gemini/guard/
 ├── GeminiSound.kt       # Sound effects
 ├── Diagnostics.kt       # Diagnostics collection/sharing
 ├── Backup.kt            # JSON export/import
-├── CommandReceiver.kt   # Broadcast API for Tasker/MacroDroid
+├── CommandReceiver.kt   # Broadcast API for integration apps (permission + token)
 ├── BankGuard.kt         # Auto-disable Accessibility for banking/VNeID
 ├── DeviceProfile.kt     # Xiaomi / Honor / other detection
 ├── AccToggle.kt         # Toggle only Gemini Guard Accessibility
